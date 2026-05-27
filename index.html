@@ -294,6 +294,34 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 }
 .btn-more-feed:hover{border-color:var(--accent);color:var(--accent);}
 
+/* ── ACCOUNT TABS ── */
+.acc-tabs{display:flex;gap:6px;flex-wrap:wrap;}
+.acc-tab{
+  background:var(--bg4);border:1px solid var(--border2);color:var(--text2);
+  padding:4px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-family:inherit;
+  transition:all .15s;white-space:nowrap;
+}
+.acc-tab:hover{border-color:var(--accent);color:var(--accent);}
+.acc-tab.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:600;}
+.acc-tab.no-token{opacity:.5;border-style:dashed;}
+
+/* ── FAV BUTTON ── */
+.btn-fav-view{
+  background:none;border:1px solid var(--border2);color:var(--text2);
+  padding:6px 12px;border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:12px;
+  transition:all .2s;
+}
+.btn-fav-view:hover,.btn-fav-view.active{border-color:#f5c518;color:#f5c518;}
+.btn-fav-view.active{background:rgba(245,197,24,.1);}
+
+/* ── FAV STAR ON CARD ── */
+.card-fav-btn{
+  background:none;border:none;cursor:pointer;font-size:16px;
+  padding:2px 4px;line-height:1;transition:transform .15s;color:var(--text3);
+}
+.card-fav-btn:hover{transform:scale(1.2);}
+.card-fav-btn.starred{color:#f5c518;}
+
 /* ── MODAL ── */
 .modal-bg{
   position:fixed;inset:0;background:rgba(0,0,0,.75);
@@ -407,14 +435,17 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
     <div class="sec3-head">
       <div class="sec3-head-l">
         <span class="sec3-title">Threads 게시물</span>
-        <span class="user-badge" id="uBadge"></span>
+        <div class="acc-tabs" id="accTabs"></div>
       </div>
-      <button class="btn-refresh" id="btnRefresh">↻ 새로고침</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn-fav-view" id="btnFavView">⭐ 즐겨찾기</button>
+        <button class="btn-refresh" id="btnRefresh">↻ 새로고침</button>
+      </div>
     </div>
     <div class="feed-wrap" id="feedWrap">
       <div class="feed-empty">
         <div class="ico">📱</div>
-        <p>🔑 토큰 설정 후 게시물을 불러올 수 있습니다</p>
+        <p>계정을 선택하면 게시물을 불러옵니다</p>
       </div>
     </div>
   </div>
@@ -461,6 +492,15 @@ const DOW = ['일','월','화','수','목','금','토'];
 const MON = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
 // ═══════════════════════════════════════════════
+//  FEED ACCOUNTS
+// ═══════════════════════════════════════════════
+const FEED_ACCOUNTS = [
+  { name:'dnfkagksekfkawnl', token:'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD' },
+  { name:'sou.0921',         token:'THAALYAgagxE1BYmJHUmw3eGNaTEJhZAi1kQTNzbzhFNlRHd1ZA4b1V4cjlaX25DREF5ZAm1ENTVZATHBkZAENuRHJVTzFFUm5GR292OV9XTkpnX3A3Nm9JMXpJd1oxcDg5Wk0za3FjUHR4SHlsSG9mYkN1Ql9SMXhGV1JrY0RZARjRyU040TWU3Mks1cXA4NFZAhRjgZD' },
+  { name:'hunya.pick',       token: localStorage.getItem('token_hunya') || null },
+];
+
+// ═══════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════
 let selDate   = today();
@@ -468,6 +508,8 @@ let calY, calM;
 let tUser     = null;
 let nextCur   = null;
 let allPosts  = [];
+let curAccIdx = 0;
+let showFavs  = false;
 
 // ═══════════════════════════════════════════════
 //  HELPERS
@@ -695,12 +737,65 @@ document.getElementById('tokenModal').addEventListener('click', e => {
 document.getElementById('btnMdSave').onclick = async () => {
   const t = document.getElementById('tokenTa').value.trim();
   if(!t){ toast('토큰을 입력해주세요'); return; }
-  localStorage.setItem('threads_token', t);
+  // hunya.pick 탭이 선택돼있으면 hunya 토큰으로 저장
+  if(FEED_ACCOUNTS[curAccIdx]?.name === 'hunya.pick'){
+    FEED_ACCOUNTS[curAccIdx].token = t;
+    localStorage.setItem('token_hunya', t);
+  } else {
+    localStorage.setItem('threads_token', t);
+  }
   closeModal();
   toast('토큰 저장됨. 피드 로드 중...', true);
+  renderAccTabs();
   await loadFeed();
 };
-document.getElementById('btnRefresh').onclick = () => loadFeed();
+document.getElementById('btnRefresh').onclick = () => { showFavs=false; loadFeed(); };
+
+// ── 계정 탭 ──────────────────────────────────────
+function renderAccTabs(){
+  const wrap = document.getElementById('accTabs');
+  wrap.innerHTML = '';
+  FEED_ACCOUNTS.forEach((acc, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'acc-tab' + (i===curAccIdx?' active':'') + (!acc.token?' no-token':'');
+    btn.textContent = acc.name;
+    btn.title = acc.token ? '' : '토큰 미설정 — 🔑 버튼으로 입력';
+    btn.onclick = () => {
+      if(!acc.token){
+        curAccIdx = i;
+        renderAccTabs();
+        openModal();
+        return;
+      }
+      curAccIdx = i;
+      showFavs = false;
+      renderAccTabs();
+      loadFeed();
+    };
+    wrap.appendChild(btn);
+  });
+}
+
+// ── 즐겨찾기 ─────────────────────────────────────
+function getFavs(){ return JSON.parse(localStorage.getItem('fav_posts')||'[]'); }
+function saveFavs(arr){ localStorage.setItem('fav_posts', JSON.stringify(arr)); }
+
+function toggleFav(post){
+  let favs = getFavs();
+  const idx = favs.findIndex(f=>f.id===post.id);
+  if(idx>=0){ favs.splice(idx,1); toast('즐겨찾기 해제'); }
+  else { favs.unshift({...post, _fav_at: Date.now()}); toast('⭐ 즐겨찾기 저장', true); }
+  saveFavs(favs);
+  return idx < 0; // true = starred
+}
+function isFav(id){ return getFavs().some(f=>f.id===id); }
+
+document.getElementById('btnFavView').onclick = () => {
+  showFavs = !showFavs;
+  document.getElementById('btnFavView').classList.toggle('active', showFavs);
+  if(showFavs) renderFavs();
+  else loadFeed();
+};
 
 // ═══════════════════════════════════════════════
 //  THREADS API
@@ -726,7 +821,8 @@ async function apiFetch(url){
 }
 
 async function loadFeed(){
-  const token = localStorage.getItem('threads_token');
+  const acc = FEED_ACCOUNTS[curAccIdx];
+  const token = acc?.token;
   if(!token){ toast('토큰을 먼저 설정해주세요'); return; }
 
   const fw = document.getElementById('feedWrap');
@@ -734,14 +830,9 @@ async function loadFeed(){
   allPosts = []; nextCur = null;
 
   try{
-    // user
     const user = await apiFetch(`${API}/me?fields=id,username&access_token=${token}`);
     tUser = user;
-    const ub = document.getElementById('uBadge');
-    ub.textContent = '@'+user.username;
-    ub.style.display = 'inline-block';
 
-    // posts
     const data = await apiFetch(
       `${API}/${user.id}/threads?fields=id,text,media_type,media_url,thumbnail_url,timestamp,permalink,like_count,replies_count,views&limit=20&access_token=${token}`
     );
@@ -760,8 +851,22 @@ async function loadFeed(){
   }
 }
 
+function renderFavs(){
+  const fw = document.getElementById('feedWrap');
+  const favs = getFavs();
+  fw.innerHTML = '';
+  if(!favs.length){
+    fw.innerHTML='<div class="feed-empty"><div class="ico">⭐</div><p>즐겨찾기한 게시물이 없습니다</p></div>';
+    return;
+  }
+  const grid = document.createElement('div'); grid.className='feed-grid'; fw.appendChild(grid);
+  favs.forEach(post => grid.appendChild(makeCard(post, post._children||[])));
+}
+
+function curToken(){ return FEED_ACCOUNTS[curAccIdx]?.token || localStorage.getItem('threads_token'); }
+
 async function loadMore(){
-  const token = localStorage.getItem('threads_token');
+  const token = curToken();
   if(!token||!tUser||!nextCur) return;
   try{
     const data = await apiFetch(
@@ -774,7 +879,8 @@ async function loadMore(){
   } catch(e){ toast('오류: '+e.message); }
 }
 
-async function getChildren(pid, token){
+async function getChildren(pid){
+  const token = curToken();
   try{
     const d = await apiFetch(`${API}/${pid}/children?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`);
     return d.data||[];
@@ -783,8 +889,6 @@ async function getChildren(pid, token){
 
 async function buildFeed(posts, append){
   const fw = document.getElementById('feedWrap');
-  const token = localStorage.getItem('threads_token');
-
   if(!append) fw.innerHTML = '';
 
   if(!posts.length && !append){
@@ -800,9 +904,10 @@ async function buildFeed(posts, append){
   if(oldLM) oldLM.remove();
 
   for(const post of posts){
-    let children = [];
-    if(post.media_type==='CAROUSEL_ALBUM'){
-      children = await getChildren(post.id, token);
+    let children = post._children || [];
+    if(!children.length && post.media_type==='CAROUSEL_ALBUM'){
+      children = await getChildren(post.id);
+      post._children = children;
     }
     grid.appendChild(makeCard(post, children));
   }
@@ -828,12 +933,31 @@ function makeCard(post, children){
   // top
   const top = document.createElement('div');
   top.className = 'card-top';
-  top.innerHTML = `
-    <div class="card-user">
-      <div class="avatar">${ini}</div>
-      <span class="card-uname">@${uname}</span>
-    </div>
-    <span class="card-time">${fmtDT(post.timestamp)}</span>`;
+
+  const cardUser = document.createElement('div');
+  cardUser.className = 'card-user';
+  cardUser.innerHTML = `<div class="avatar">${ini}</div><span class="card-uname">@${uname}</span>`;
+  top.appendChild(cardUser);
+
+  const topRight = document.createElement('div');
+  topRight.style.cssText = 'display:flex;align-items:center;gap:6px;';
+
+  const favBtn = document.createElement('button');
+  favBtn.className = 'card-fav-btn' + (isFav(post.id) ? ' starred' : '');
+  favBtn.textContent = '⭐';
+  favBtn.title = '즐겨찾기';
+  favBtn.onclick = () => {
+    const nowStarred = toggleFav(post);
+    favBtn.className = 'card-fav-btn' + (nowStarred ? ' starred' : '');
+  };
+  topRight.appendChild(favBtn);
+
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'card-time';
+  timeSpan.textContent = fmtDT(post.timestamp);
+  topRight.appendChild(timeSpan);
+
+  top.appendChild(topRight);
   card.appendChild(top);
 
   // media
@@ -909,7 +1033,7 @@ function makeCard(post, children){
         repliesLoaded = true;
         repliesDiv.innerHTML = '<div class="reply-inner" style="color:var(--text2);font-size:11px">불러오는 중...</div>';
         try{
-          const token = localStorage.getItem('threads_token');
+          const token = curToken();
           const d = await apiFetch(`${API}/${post.id}/replies?fields=id,text,username,timestamp&access_token=${token}`);
           const items = d.data||[];
           const inner = document.createElement('div');
@@ -1018,6 +1142,25 @@ function getMediaList(post, children){
 }
 
 async function dlMedia(url, filename){
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(isIOS && navigator.canShare){
+    try{
+      toast('다운로드 중...', true);
+      const r = await fetch(PROXY + encodeURIComponent(url));
+      const b = await r.blob();
+      const file = new File([b], filename, {type: b.type});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title: filename});
+        return;
+      }
+    } catch(e){
+      if(e.name !== 'AbortError'){
+        window.open(url,'_blank');
+        toast('새 탭에서 열림 — 직접 저장해주세요');
+      }
+      return;
+    }
+  }
   try{
     toast('다운로드 중...', true);
     const r = await fetch(url);
@@ -1048,8 +1191,8 @@ async function dlMedia(url, filename){
   initCal();
   renderCal();
   renderCL();
-  const t = localStorage.getItem('threads_token');
-  if(t) loadFeed();
+  renderAccTabs();
+  loadFeed();
 })();
 </script>
 </body>
