@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>콘텐츠 매니저</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+<style>
+:root {
+  --bg:     #0f0f0f;
+  --bg2:    #161616;
+  --bg3:    #1e1e1e;
+  --bg4:    #272727;
+  --accent: #00d4aa;
+  --accent-dim: rgba(0,212,170,.12);
+  --accent-dim2: rgba(0,212,170,.06);
+  --text:   #e2e2e2;
+  --text2:  #999;
+  --text3:  #555;
+  --border: #2a2a2a;
+  --border2:#383838;
+  --danger: #ff5555;
+  --r:      12px;
+  --r2:     8px;
+  --r3:     6px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--bg2);}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+/* ── HEADER ── */
+.header{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:14px 24px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:200;
+}
+.header-left{display:flex;flex-direction:column;gap:2px;}
+.header-title{font-size:18px;font-weight:700;color:var(--accent);letter-spacing:-.5px;}
+.header-date{font-size:12px;color:var(--text2);}
+.btn-token{
+  background:var(--accent-dim);color:var(--accent);
+  border:1px solid rgba(0,212,170,.35);padding:7px 14px;
+  border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;
+  transition:all .2s;
+}
+.btn-token:hover{background:var(--accent);color:#000;}
+
+/* ── LAYOUT ── */
+.wrap{padding:20px 24px;max-width:1440px;margin:0 auto;}
+
+/* ── SECTION 2 ── */
+.sec2{display:grid;grid-template-columns:1fr 280px;gap:16px;margin-bottom:16px;}
+
+/* ── CHECKLIST PANEL ── */
+.checklist-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.checklist-top{
+  padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.checklist-top-label{font-size:13px;font-weight:600;color:var(--text);}
+.ro-badge{
+  font-size:11px;color:var(--text2);background:var(--bg4);
+  border:1px solid var(--border2);padding:2px 8px;border-radius:20px;display:none;
+}
+.cl-table{width:100%;border-collapse:collapse;}
+.cl-table th{
+  background:var(--bg3);padding:9px 10px;
+  font-size:11px;font-weight:600;color:var(--text2);
+  text-align:center;border-bottom:1px solid var(--border);border-right:1px solid var(--border);
+  white-space:nowrap;line-height:1.4;
+}
+.cl-table th:first-child{text-align:left;padding-left:14px;min-width:150px;}
+.cl-table th:last-child{border-right:none;}
+.cl-table td{
+  border-bottom:1px solid var(--border);border-right:1px solid var(--border);
+  padding:0;vertical-align:middle;
+}
+.cl-table td:last-child{border-right:none;}
+.cl-table tr:last-child td{border-bottom:none;}
+.cl-table tr:hover td{background:rgba(255,255,255,.015);}
+.acc-cell{
+  padding:10px 14px;font-size:12px;font-weight:500;
+  display:flex;align-items:center;gap:6px;
+}
+.acc-badge{
+  font-size:10px;font-weight:700;color:#000;background:var(--accent);
+  width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.acc-name{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;}
+.acc-input{
+  background:transparent;border:none;outline:none;
+  color:var(--text);font-family:inherit;font-size:12px;font-weight:500;
+  width:100%;caret-color:var(--accent);
+}
+.acc-input::placeholder{color:var(--text3);}
+.task-cell{
+  display:flex;align-items:center;gap:7px;padding:7px 10px;
+  transition:background .15s;
+}
+.task-cell.is-checked{background:var(--accent-dim2);}
+
+/* checkbox */
+.cb-wrap{position:relative;flex-shrink:0;}
+.cb-wrap input{position:absolute;opacity:0;width:0;height:0;}
+.cb-box{
+  width:18px;height:18px;border:1.5px solid var(--border2);border-radius:4px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.cb-box:hover{border-color:var(--accent);}
+.cb-wrap input:checked + .cb-box{background:var(--accent);border-color:var(--accent);}
+.cb-wrap input:checked + .cb-box::after{
+  content:'';width:4px;height:8px;
+  border:1.5px solid #000;border-top:none;border-left:none;
+  transform:rotate(45deg) translateY(-1px);
+}
+.cb-wrap input:disabled + .cb-box{cursor:not-allowed;opacity:.5;}
+
+.memo-inp{
+  flex:1;background:transparent;border:none;outline:none;
+  color:var(--text2);font-family:inherit;font-size:11px;
+  min-width:0;caret-color:var(--accent);
+}
+.memo-inp::placeholder{color:var(--text3);}
+.memo-inp:disabled{cursor:not-allowed;}
+.memo-inp:focus{color:var(--text);}
+
+/* ── CALENDAR ── */
+.cal-panel{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:14px;
+}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.cal-month-lbl{font-size:13px;font-weight:600;}
+.cal-btn{
+  background:none;border:1px solid var(--border2);color:var(--text2);
+  width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:13px;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.cal-btn:hover{border-color:var(--accent);color:var(--accent);}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;}
+.cal-dow{
+  text-align:center;font-size:10px;font-weight:600;
+  color:var(--text3);padding:3px 0 5px;
+}
+.cal-day{
+  position:relative;text-align:center;padding:5px 2px;font-size:12px;
+  border-radius:5px;cursor:pointer;transition:all .12s;color:var(--text2);
+  user-select:none;
+}
+.cal-day:hover:not(.cal-other):not(.cal-empty){background:var(--bg4);color:var(--text);}
+.cal-day.cal-today{
+  background:var(--accent);color:#000;font-weight:700;border-radius:50%;
+}
+.cal-day.cal-selected:not(.cal-today){
+  background:var(--accent-dim);color:var(--accent);
+  border:1px solid rgba(0,212,170,.4);
+}
+.cal-day.cal-dot::after{
+  content:'';position:absolute;bottom:2px;left:50%;
+  transform:translateX(-50%);width:4px;height:4px;
+  border-radius:50%;background:var(--accent);
+}
+.cal-day.cal-today.cal-dot::after{background:rgba(0,0,0,.4);}
+.cal-other{color:var(--text3);opacity:.4;cursor:default;}
+.cal-empty{cursor:default;}
+.cal-sun{color:#ff6b6b;}
+.cal-sat{color:#6b9fff;}
+
+/* ── SECTION 3 ── */
+.sec3{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);}
+.sec3-head{
+  padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+}
+.sec3-head-l{display:flex;align-items:center;gap:10px;}
+.sec3-title{font-size:15px;font-weight:700;}
+.user-badge{
+  font-size:11px;color:var(--accent);background:var(--accent-dim);
+  border:1px solid rgba(0,212,170,.25);padding:3px 10px;border-radius:20px;display:none;
+}
+.btn-refresh{
+  background:none;border:1px solid var(--border2);color:var(--text2);
+  padding:6px 14px;border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:12px;
+  transition:all .2s;
+}
+.btn-refresh:hover{border-color:var(--accent);color:var(--accent);}
+.feed-wrap{padding:18px;}
+.feed-empty{text-align:center;padding:52px 20px;color:var(--text2);}
+.feed-empty .ico{font-size:36px;margin-bottom:10px;}
+.feed-empty p{font-size:13px;}
+.feed-loading{text-align:center;padding:40px;color:var(--text2);font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.feed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;}
+
+/* ── POST CARD ── */
+.post-card{
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;transition:transform .2s,box-shadow .2s;
+}
+.post-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.45);}
+.card-top{
+  padding:11px 13px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);
+}
+.card-user{display:flex;align-items:center;gap:7px;}
+.avatar{
+  width:28px;height:28px;border-radius:50%;background:var(--accent-dim);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:var(--accent);flex-shrink:0;
+}
+.card-uname{font-size:12px;font-weight:600;}
+.card-time{font-size:11px;color:var(--text3);}
+
+/* media */
+.card-media{position:relative;background:#000;overflow:hidden;max-height:340px;}
+.card-media img{width:100%;display:block;object-fit:cover;max-height:340px;}
+.card-media video{width:100%;display:block;object-fit:cover;max-height:340px;background:#000;}
+.vid-overlay{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;background:rgba(0,0,0,.25);transition:background .2s;
+}
+.vid-overlay:hover{background:rgba(0,0,0,.05);}
+.play-btn{
+  width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.9);
+  display:flex;align-items:center;justify-content:center;font-size:16px;padding-left:3px;
+}
+
+/* carousel */
+.carousel{position:relative;}
+.car-slides{overflow:hidden;}
+.car-track{display:flex;transition:transform .3s ease;}
+.car-track > *{min-width:100%;width:100%;max-height:340px;object-fit:cover;}
+.car-nav{
+  position:absolute;top:50%;transform:translateY(-50%);
+  background:rgba(0,0,0,.55);border:none;color:#fff;
+  width:30px;height:30px;border-radius:50%;cursor:pointer;
+  font-size:16px;display:flex;align-items:center;justify-content:center;z-index:5;
+}
+.car-nav.car-prev{left:8px;}
+.car-nav.car-next{right:8px;}
+.car-dots{
+  position:absolute;bottom:7px;left:50%;transform:translateX(-50%);
+  display:flex;gap:4px;
+}
+.car-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.45);cursor:pointer;transition:background .2s;}
+.car-dot.on{background:#fff;}
+
+/* card body */
+.card-body{padding:11px 13px;}
+.post-txt{font-size:12px;color:var(--text);line-height:1.65;max-height:76px;overflow:hidden;transition:max-height .3s;white-space:pre-wrap;word-break:break-all;}
+.post-txt.expanded{max-height:none;}
+.btn-more{background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;font-family:inherit;padding:3px 0;}
+
+/* stats */
+.card-stats{
+  padding:8px 13px;display:flex;gap:14px;
+  border-top:1px solid var(--border);font-size:11px;color:var(--text2);
+}
+.stat{display:flex;align-items:center;gap:3px;}
+
+/* actions */
+.card-actions{
+  padding:9px 13px;display:flex;gap:6px;flex-wrap:wrap;
+  border-top:1px solid var(--border);
+}
+.act-btn{
+  background:var(--bg4);border:1px solid var(--border2);color:var(--text2);
+  padding:4px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit;
+  transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:3px;
+}
+.act-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* replies */
+.replies{overflow:hidden;max-height:0;transition:max-height .3s;}
+.replies.open{max-height:360px;overflow-y:auto;border-top:1px solid var(--border);}
+.reply-inner{padding:8px 13px;}
+.reply-item{padding:6px 0;border-bottom:1px solid var(--border);font-size:11px;}
+.reply-item:last-child{border-bottom:none;}
+.reply-u{font-weight:600;color:var(--accent);margin-right:5px;}
+.reply-t{color:var(--text3);margin-left:5px;font-size:10px;}
+
+/* load more */
+.load-more{text-align:center;padding:18px;}
+.btn-more-feed{
+  background:var(--bg3);border:1px solid var(--border2);color:var(--text2);
+  padding:9px 28px;border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:13px;
+  transition:all .2s;
+}
+.btn-more-feed:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── MODAL ── */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);
+  display:flex;align-items:center;justify-content:center;z-index:999;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.modal-bg.open{opacity:1;pointer-events:all;}
+.modal{
+  background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);
+  padding:22px;width:460px;max-width:92vw;
+  transform:translateY(12px);transition:transform .2s;
+}
+.modal-bg.open .modal{transform:translateY(0);}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:14px;}
+.modal label{font-size:11px;color:var(--text2);display:block;margin-bottom:5px;}
+.modal textarea{
+  width:100%;height:96px;background:var(--bg3);
+  border:1px solid var(--border2);border-radius:var(--r2);
+  color:var(--text);font-family:'Courier New',monospace;font-size:12px;
+  padding:9px;resize:vertical;outline:none;transition:border-color .2s;
+}
+.modal textarea:focus{border-color:var(--accent);}
+.modal-note{font-size:11px;color:var(--text3);margin-top:7px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+.btn-cancel{
+  background:none;border:1px solid var(--border2);color:var(--text2);
+  padding:7px 14px;border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:12px;
+}
+.btn-save{
+  background:var(--accent);border:none;color:#000;
+  padding:7px 18px;border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
+  transition:opacity .2s;
+}
+.btn-save:hover{opacity:.85;}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:22px;right:22px;
+  background:var(--bg3);border:1px solid var(--border2);color:var(--text);
+  padding:9px 16px;border-radius:var(--r2);font-size:12px;z-index:9999;
+  transform:translateY(60px);opacity:0;transition:all .28s;pointer-events:none;
+}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.ok{border-color:var(--accent);color:var(--accent);}
+
+/* ── SPINNER ── */
+.spin{
+  display:inline-block;width:14px;height:14px;
+  border:2px solid var(--border2);border-top-color:var(--accent);
+  border-radius:50%;animation:sp .7s linear infinite;
+}
+@keyframes sp{to{transform:rotate(360deg);}}
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .sec2{grid-template-columns:1fr;}
+  .wrap{padding:14px;}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-left">
+    <div class="header-title">📋 콘텐츠 매니저</div>
+    <div class="header-date" id="hDate"></div>
+  </div>
+  <button class="btn-token" id="btnToken">🔑 토큰 설정</button>
+</header>
+
+<div class="wrap">
+
+  <!-- SECTION 2 -->
+  <div class="sec2">
+
+    <!-- Checklist -->
+    <div class="checklist-panel">
+      <div class="checklist-top">
+        <div class="checklist-top-label" id="clLabel"></div>
+        <span class="ro-badge" id="roBadge">🔒 읽기 전용</span>
+      </div>
+      <table class="cl-table">
+        <thead>
+          <tr>
+            <th>계정</th>
+            <th>☀️ AM 07~09<br><small style="font-weight:400;opacity:.8">1차 업로드</small></th>
+            <th>🎬 PM 12~13<br><small style="font-weight:400;opacity:.8">영상소스탐색</small></th>
+            <th>🌙 PM 20~23<br><small style="font-weight:400;opacity:.8">2차 업로드</small></th>
+          </tr>
+        </thead>
+        <tbody id="clBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Calendar -->
+    <div class="cal-panel">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">📅 날짜 선택</div>
+      <div class="cal-head">
+        <button class="cal-btn" id="calPrev">‹</button>
+        <span class="cal-month-lbl" id="calLbl"></span>
+        <button class="cal-btn" id="calNext">›</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+  </div>
+
+  <!-- SECTION 3 -->
+  <div class="sec3">
+    <div class="sec3-head">
+      <div class="sec3-head-l">
+        <span class="sec3-title">Threads 게시물</span>
+        <span class="user-badge" id="uBadge"></span>
+      </div>
+      <button class="btn-refresh" id="btnRefresh">↻ 새로고침</button>
+    </div>
+    <div class="feed-wrap" id="feedWrap">
+      <div class="feed-empty">
+        <div class="ico">📱</div>
+        <p>🔑 토큰 설정 후 게시물을 불러올 수 있습니다</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOKEN MODAL -->
+<div class="modal-bg" id="tokenModal">
+  <div class="modal">
+    <div class="modal-title">🔑 Threads Access Token 설정</div>
+    <label>Access Token</label>
+    <textarea id="tokenTa" placeholder="Threads Access Token을 붙여넣으세요..."></textarea>
+    <p class="modal-note">토큰은 브라우저 localStorage에만 저장됩니다. 외부 서버로 전송되지 않습니다.</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnMdClose">취소</button>
+      <button class="btn-save" id="btnMdSave">저장 및 로드</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════
+const ACCOUNTS = [
+  {id:'A', name:'dnfkagksekfkawnl'},
+  {id:'B', name:'ddack.life'},
+  {id:'C', name:'sou.0921'},
+  {id:'D', name:'hunya.pick'},
+  {id:'E', name:'moos_smom'},
+  {id:'F', name:''},
+];
+const COLS = [
+  {id:'c2', ph:'메모...'},
+  {id:'c3', ph:'메모...'},
+  {id:'c4', ph:'메모...'},
+];
+const API = 'https://graph.threads.net/v1.0';
+const DOW = ['일','월','화','수','목','금','토'];
+const MON = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let selDate   = today();
+let calY, calM;
+let tUser     = null;
+let nextCur   = null;
+let allPosts  = [];
+
+// ═══════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+}
+function p2(n){ return String(n).padStart(2,'0'); }
+function fmtDate(s){
+  const [y,m,d] = s.split('-').map(Number);
+  return `${y}년 ${m}월 ${d}일 ${DOW[new Date(y,m-1,d).getDay()]}요일`;
+}
+function fmtDT(iso){
+  const d = new Date(iso);
+  return `${d.getFullYear()}.${p2(d.getMonth()+1)}.${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+function toast(msg, ok=false){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (ok?' ok':'');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className='toast', 2600);
+}
+function clKey(ds){ return 'cl_'+ds; }
+function loadCl(ds){ const r=localStorage.getItem(clKey(ds)); return r?JSON.parse(r):{}; }
+function saveCl(ds,d){ localStorage.setItem(clKey(ds),JSON.stringify(d)); }
+function hasCl(ds){ const d=loadCl(ds); return Object.keys(d).some(k=>d[k].checked||d[k].memo); }
+function isRO(ds){ return ds < today(); }
+
+// ═══════════════════════════════════════════════
+//  HEADER
+// ═══════════════════════════════════════════════
+function renderHeader(){
+  document.getElementById('hDate').textContent = fmtDate(today());
+}
+
+// ═══════════════════════════════════════════════
+//  CHECKLIST
+// ═══════════════════════════════════════════════
+function renderCL(){
+  const data = loadCl(selDate);
+  const ro   = isRO(selDate);
+  const isToday = selDate === today();
+
+  let lbl = fmtDate(selDate);
+  if(isToday) lbl += ' (오늘)';
+  document.getElementById('clLabel').textContent = '📋 ' + lbl;
+  document.getElementById('roBadge').style.display = ro ? 'inline-block' : 'none';
+
+  const tbody = document.getElementById('clBody');
+  tbody.innerHTML = '';
+
+  ACCOUNTS.forEach(acc => {
+    const tr = document.createElement('tr');
+
+    // account cell
+    const tdA = document.createElement('td');
+    const aDiv = document.createElement('div');
+    aDiv.className = 'acc-cell';
+    const badge = document.createElement('div');
+    badge.className = 'acc-badge';
+    badge.textContent = acc.id;
+    aDiv.appendChild(badge);
+
+    if(acc.id === 'F'){
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'acc-input';
+      inp.placeholder = '계정명 입력...';
+      inp.value = localStorage.getItem('f_name') || '';
+      inp.disabled = ro;
+      inp.addEventListener('change', () => localStorage.setItem('f_name', inp.value));
+      aDiv.appendChild(inp);
+    } else {
+      const span = document.createElement('span');
+      span.className = 'acc-name';
+      span.title = acc.name;
+      span.textContent = acc.name;
+      aDiv.appendChild(span);
+    }
+    tdA.appendChild(aDiv);
+    tr.appendChild(tdA);
+
+    // task cells
+    COLS.forEach(col => {
+      const key = acc.id + '-' + col.id;
+      const cell = data[key] || {checked:false, memo:''};
+      const td = document.createElement('td');
+
+      const div = document.createElement('div');
+      div.className = 'task-cell' + (cell.checked ? ' is-checked' : '');
+
+      // checkbox
+      const lbl2 = document.createElement('label');
+      lbl2.className = 'cb-wrap';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = cell.checked;
+      cb.disabled = ro;
+      const box = document.createElement('span');
+      box.className = 'cb-box';
+      lbl2.appendChild(cb);
+      lbl2.appendChild(box);
+
+      // memo
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'memo-inp';
+      inp.placeholder = col.ph;
+      inp.value = cell.memo || '';
+      inp.disabled = ro;
+
+      const save = () => {
+        const cur = loadCl(selDate);
+        cur[key] = {checked: cb.checked, memo: inp.value};
+        saveCl(selDate, cur);
+        div.className = 'task-cell' + (cb.checked ? ' is-checked' : '');
+        // update calendar dots
+        renderCal();
+      };
+      cb.addEventListener('change', save);
+      inp.addEventListener('blur', save);
+      inp.addEventListener('keydown', e => { if(e.key==='Enter') inp.blur(); });
+
+      div.appendChild(lbl2);
+      div.appendChild(inp);
+      td.appendChild(div);
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  CALENDAR
+// ═══════════════════════════════════════════════
+function initCal(){
+  const d = new Date();
+  calY = d.getFullYear();
+  calM = d.getMonth();
+}
+function renderCal(){
+  const td = today();
+  document.getElementById('calLbl').textContent = calY+'년 '+MON[calM];
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = '';
+
+  // dow headers
+  DOW.forEach((d,i) => {
+    const el = document.createElement('div');
+    el.className = 'cal-dow';
+    el.style.color = i===0?'#ff6b6b':i===6?'#6b9fff':'';
+    el.textContent = d;
+    grid.appendChild(el);
+  });
+
+  const first = new Date(calY, calM, 1).getDay();
+  const days  = new Date(calY, calM+1, 0).getDate();
+  const prev  = new Date(calY, calM, 0).getDate();
+
+  // prev month padding
+  for(let i=first-1; i>=0; i--){
+    const el = document.createElement('div');
+    el.className = 'cal-day cal-other';
+    el.textContent = prev - i;
+    grid.appendChild(el);
+  }
+
+  // current month
+  for(let d=1; d<=days; d++){
+    const ds = `${calY}-${p2(calM+1)}-${p2(d)}`;
+    const dow = new Date(calY, calM, d).getDay();
+    const el = document.createElement('div');
+    el.className = 'cal-day';
+    if(dow===0) el.classList.add('cal-sun');
+    if(dow===6) el.classList.add('cal-sat');
+    if(ds===td) el.classList.add('cal-today');
+    if(ds===selDate) el.classList.add('cal-selected');
+    if(hasCl(ds)) el.classList.add('cal-dot');
+    el.textContent = d;
+    el.addEventListener('click', () => {
+      selDate = ds;
+      renderCal();
+      renderCL();
+    });
+    grid.appendChild(el);
+  }
+
+  // next month padding
+  const total = first + days;
+  const rem = total % 7;
+  if(rem !== 0){
+    for(let d=1; d<=7-rem; d++){
+      const el = document.createElement('div');
+      el.className = 'cal-day cal-other';
+      el.textContent = d;
+      grid.appendChild(el);
+    }
+  }
+}
+document.getElementById('calPrev').onclick = () => {
+  calM--; if(calM<0){calM=11;calY--;} renderCal();
+};
+document.getElementById('calNext').onclick = () => {
+  calM++; if(calM>11){calM=0;calY++;} renderCal();
+};
+
+// ═══════════════════════════════════════════════
+//  TOKEN MODAL
+// ═══════════════════════════════════════════════
+function openModal(){
+  document.getElementById('tokenTa').value = localStorage.getItem('threads_token')||'';
+  document.getElementById('tokenModal').classList.add('open');
+}
+function closeModal(){
+  document.getElementById('tokenModal').classList.remove('open');
+}
+document.getElementById('btnToken').onclick    = openModal;
+document.getElementById('btnMdClose').onclick  = closeModal;
+document.getElementById('tokenModal').addEventListener('click', e => {
+  if(e.target.id==='tokenModal') closeModal();
+});
+document.getElementById('btnMdSave').onclick = async () => {
+  const t = document.getElementById('tokenTa').value.trim();
+  if(!t){ toast('토큰을 입력해주세요'); return; }
+  localStorage.setItem('threads_token', t);
+  closeModal();
+  toast('토큰 저장됨. 피드 로드 중...', true);
+  await loadFeed();
+};
+document.getElementById('btnRefresh').onclick = () => loadFeed();
+
+// ═══════════════════════════════════════════════
+//  THREADS API
+// ═══════════════════════════════════════════════
+async function apiFetch(url){
+  const r = await fetch(url);
+  if(!r.ok){
+    let msg = `HTTP ${r.status}`;
+    try{ const j=await r.json(); msg=j.error?.message||msg; } catch(e){}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+
+async function loadFeed(){
+  const token = localStorage.getItem('threads_token');
+  if(!token){ toast('토큰을 먼저 설정해주세요'); return; }
+
+  const fw = document.getElementById('feedWrap');
+  fw.innerHTML = '<div class="feed-loading"><div class="spin"></div> 게시물 불러오는 중...</div>';
+  allPosts = []; nextCur = null;
+
+  try{
+    // user
+    const user = await apiFetch(`${API}/me?fields=id,username&access_token=${token}`);
+    tUser = user;
+    const ub = document.getElementById('uBadge');
+    ub.textContent = '@'+user.username;
+    ub.style.display = 'inline-block';
+
+    // posts
+    const data = await apiFetch(
+      `${API}/${user.id}/threads?fields=id,text,media_type,media_url,thumbnail_url,timestamp,permalink,like_count,replies_count,views&limit=20&access_token=${token}`
+    );
+    allPosts = data.data || [];
+    nextCur = data.paging?.cursors?.after || null;
+
+    await buildFeed(allPosts, false);
+  } catch(e){
+    fw.innerHTML = `
+      <div class="feed-empty">
+        <div class="ico">⚠️</div>
+        <p style="color:var(--danger)">${e.message}</p>
+        <p style="margin-top:6px">토큰이 올바른지 확인해주세요</p>
+      </div>`;
+    toast('오류: '+e.message);
+  }
+}
+
+async function loadMore(){
+  const token = localStorage.getItem('threads_token');
+  if(!token||!tUser||!nextCur) return;
+  try{
+    const data = await apiFetch(
+      `${API}/${tUser.id}/threads?fields=id,text,media_type,media_url,thumbnail_url,timestamp,permalink,like_count,replies_count,views&limit=20&after=${nextCur}&access_token=${token}`
+    );
+    const more = data.data || [];
+    nextCur = data.paging?.cursors?.after || null;
+    allPosts = [...allPosts, ...more];
+    await buildFeed(more, true);
+  } catch(e){ toast('오류: '+e.message); }
+}
+
+async function getChildren(pid, token){
+  try{
+    const d = await apiFetch(`${API}/${pid}/children?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`);
+    return d.data||[];
+  } catch{ return []; }
+}
+
+async function buildFeed(posts, append){
+  const fw = document.getElementById('feedWrap');
+  const token = localStorage.getItem('threads_token');
+
+  if(!append) fw.innerHTML = '';
+
+  if(!posts.length && !append){
+    fw.innerHTML='<div class="feed-empty"><div class="ico">📭</div><p>게시물이 없습니다</p></div>';
+    return;
+  }
+
+  let grid = fw.querySelector('.feed-grid');
+  if(!grid){ grid=document.createElement('div'); grid.className='feed-grid'; fw.appendChild(grid); }
+
+  // remove old load-more
+  const oldLM = fw.querySelector('.load-more');
+  if(oldLM) oldLM.remove();
+
+  for(const post of posts){
+    let children = [];
+    if(post.media_type==='CAROUSEL_ALBUM'){
+      children = await getChildren(post.id, token);
+    }
+    grid.appendChild(makeCard(post, children));
+  }
+
+  if(nextCur){
+    const lm = document.createElement('div');
+    lm.className = 'load-more';
+    const btn = document.createElement('button');
+    btn.className = 'btn-more-feed';
+    btn.textContent = '더 보기';
+    btn.onclick = () => { btn.textContent='불러오는 중...'; btn.disabled=true; loadMore(); };
+    lm.appendChild(btn);
+    fw.appendChild(lm);
+  }
+}
+
+function makeCard(post, children){
+  const card = document.createElement('div');
+  card.className = 'post-card';
+  const uname = tUser?.username||'user';
+  const ini = uname.slice(0,2).toUpperCase();
+
+  // top
+  const top = document.createElement('div');
+  top.className = 'card-top';
+  top.innerHTML = `
+    <div class="card-user">
+      <div class="avatar">${ini}</div>
+      <span class="card-uname">@${uname}</span>
+    </div>
+    <span class="card-time">${fmtDT(post.timestamp)}</span>`;
+  card.appendChild(top);
+
+  // media
+  const med = buildMedia(post, children);
+  if(med) card.appendChild(med);
+
+  // body text
+  const txt = (post.text||'').trim();
+  if(txt){
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    const ptxt = document.createElement('div');
+    ptxt.className = 'post-txt';
+    ptxt.textContent = txt;
+    body.appendChild(ptxt);
+    if(txt.length > 90){
+      const bm = document.createElement('button');
+      bm.className = 'btn-more';
+      bm.textContent = '더보기';
+      bm.onclick = () => {
+        const ex = ptxt.classList.toggle('expanded');
+        bm.textContent = ex?'접기':'더보기';
+      };
+      body.appendChild(bm);
+    }
+    card.appendChild(body);
+  }
+
+  // stats
+  const stats = document.createElement('div');
+  stats.className = 'card-stats';
+  const li = post.like_count||0, re=post.replies_count||0, vi=post.views||0;
+  stats.innerHTML = `
+    <span class="stat">❤️ ${li.toLocaleString()}</span>
+    <span class="stat">💬 ${re.toLocaleString()}</span>
+    ${vi?`<span class="stat">👁️ ${vi.toLocaleString()}</span>`:''}`;
+  card.appendChild(stats);
+
+  // actions
+  const acts = document.createElement('div');
+  acts.className = 'card-actions';
+
+  if(post.permalink){
+    const a = document.createElement('a');
+    a.href = post.permalink; a.target='_blank';
+    a.className='act-btn'; a.innerHTML='🔗 원문 보기';
+    acts.appendChild(a);
+  }
+
+  // download buttons
+  getMediaList(post, children).forEach((item,i,arr) => {
+    const btn = document.createElement('button');
+    btn.className = 'act-btn';
+    const isVid = item.type==='VIDEO';
+    btn.innerHTML = isVid ? '⬇️ 영상' : '⬇️ 이미지';
+    if(arr.length>1) btn.innerHTML += ` ${i+1}`;
+    btn.onclick = () => dlMedia(item.url, `threads_${post.id}_${i+1}.${isVid?'mp4':'jpg'}`);
+    acts.appendChild(btn);
+  });
+
+  // replies
+  const repliesDiv = document.createElement('div');
+  repliesDiv.className = 'replies';
+  let repliesLoaded = false;
+
+  if(re > 0){
+    const btn = document.createElement('button');
+    btn.className = 'act-btn';
+    btn.innerHTML = `💬 댓글 ${re}`;
+    btn.onclick = async () => {
+      const isOpen = repliesDiv.classList.toggle('open');
+      if(isOpen && !repliesLoaded){
+        repliesLoaded = true;
+        repliesDiv.innerHTML = '<div class="reply-inner" style="color:var(--text2);font-size:11px">불러오는 중...</div>';
+        try{
+          const token = localStorage.getItem('threads_token');
+          const d = await apiFetch(`${API}/${post.id}/replies?fields=id,text,username,timestamp&access_token=${token}`);
+          const items = d.data||[];
+          const inner = document.createElement('div');
+          inner.className = 'reply-inner';
+          if(!items.length){
+            inner.textContent = '댓글 없음';
+            inner.style.cssText='color:var(--text2);font-size:11px';
+          } else {
+            items.forEach(r=>{
+              const div=document.createElement('div');
+              div.className='reply-item';
+              div.innerHTML=`<span class="reply-u">@${r.username||'?'}</span><span>${r.text||''}</span><span class="reply-t">${fmtDT(r.timestamp)}</span>`;
+              inner.appendChild(div);
+            });
+          }
+          repliesDiv.innerHTML='';
+          repliesDiv.appendChild(inner);
+        } catch(e){
+          repliesDiv.innerHTML=`<div class="reply-inner" style="color:var(--danger);font-size:11px">오류: ${e.message}</div>`;
+        }
+      }
+    };
+    acts.appendChild(btn);
+  }
+
+  card.appendChild(acts);
+  if(re>0) card.appendChild(repliesDiv);
+  return card;
+}
+
+function buildMedia(post, children){
+  const t = post.media_type;
+  if(t==='IMAGE' && post.media_url){
+    const w=document.createElement('div'); w.className='card-media';
+    const img=document.createElement('img'); img.src=post.media_url; img.loading='lazy'; img.alt='';
+    w.appendChild(img); return w;
+  }
+  if(t==='VIDEO' && post.media_url){
+    const w=document.createElement('div'); w.className='card-media';
+    const v=document.createElement('video');
+    v.src=post.media_url; v.poster=post.thumbnail_url||'';
+    v.playsInline=true; v.loop=true;
+    const ov=document.createElement('div'); ov.className='vid-overlay';
+    ov.innerHTML='<div class="play-btn">▶</div>';
+    ov.onclick=()=>{ ov.remove(); v.controls=true; v.play(); };
+    w.appendChild(v); w.appendChild(ov); return w;
+  }
+  if(t==='CAROUSEL_ALBUM' && children.length){
+    return buildCarousel(children);
+  }
+  return null;
+}
+
+function buildCarousel(items){
+  const w = document.createElement('div');
+  w.className = 'card-media carousel';
+  const sw = document.createElement('div'); sw.className='car-slides';
+  const track = document.createElement('div'); track.className='car-track';
+
+  items.forEach(c=>{
+    if(c.media_type==='IMAGE'){
+      const img=document.createElement('img'); img.src=c.media_url||''; img.loading='lazy';
+      track.appendChild(img);
+    } else if(c.media_type==='VIDEO'){
+      const v=document.createElement('video');
+      v.src=c.media_url||''; v.poster=c.thumbnail_url||'';
+      v.controls=true; v.playsInline=true;
+      track.appendChild(v);
+    }
+  });
+  sw.appendChild(track); w.appendChild(sw);
+
+  if(items.length<2) return w;
+
+  let cur=0;
+  const dots=document.createElement('div'); dots.className='car-dots';
+  items.forEach((_,i)=>{
+    const d=document.createElement('div');
+    d.className='car-dot'+(i===0?' on':'');
+    d.onclick=()=>goto(i);
+    dots.appendChild(d);
+  });
+
+  function goto(n){
+    cur=Math.max(0,Math.min(n,items.length-1));
+    track.style.transform=`translateX(-${cur*100}%)`;
+    dots.querySelectorAll('.car-dot').forEach((d,i)=>d.classList.toggle('on',i===cur));
+  }
+
+  const prev=document.createElement('button'); prev.className='car-nav car-prev'; prev.textContent='‹';
+  const next=document.createElement('button'); next.className='car-nav car-next'; next.textContent='›';
+  prev.onclick=()=>goto(cur-1);
+  next.onclick=()=>goto(cur+1);
+
+  w.appendChild(prev); w.appendChild(next); w.appendChild(dots);
+  return w;
+}
+
+function getMediaList(post, children){
+  if(post.media_type==='IMAGE'   && post.media_url) return [{type:'IMAGE', url:post.media_url}];
+  if(post.media_type==='VIDEO'   && post.media_url) return [{type:'VIDEO', url:post.media_url}];
+  if(post.media_type==='CAROUSEL_ALBUM'){
+    return children.filter(c=>c.media_url).map(c=>({type:c.media_type, url:c.media_url}));
+  }
+  return [];
+}
+
+async function dlMedia(url, filename){
+  try{
+    toast('다운로드 중...', true);
+    const r = await fetch(url);
+    const b = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    toast('다운로드 완료 ✓', true);
+  } catch(e){
+    window.open(url,'_blank');
+    toast('새 탭에서 열림 — 직접 저장해주세요');
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+(function init(){
+  // 토큰 미설정 시 자동 주입
+  const DEFAULT_TOKEN = 'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD';
+  if(!localStorage.getItem('threads_token')){
+    localStorage.setItem('threads_token', DEFAULT_TOKEN);
+  }
+  renderHeader();
+  initCal();
+  renderCal();
+  renderCL();
+  const t = localStorage.getItem('threads_token');
+  if(t) loadFeed();
+})();
+</script>
+</body>
+</html>
