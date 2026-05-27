@@ -1074,31 +1074,40 @@ function makeCard(post, children){
     btn.innerHTML = re > 0 ? `💬 댓글 ${re}` : '💬 댓글';
     btn.onclick = async () => {
       const isOpen = repliesDiv.classList.toggle('open');
-      if(isOpen && !repliesLoaded){
-        repliesLoaded = true;
-        repliesDiv.innerHTML = '<div class="reply-inner" style="color:var(--text2);font-size:11px">불러오는 중...</div>';
-        try{
-          const token = curToken();
-          const d = await apiFetch(`${API}/${post.id}/replies?fields=id,text,username,timestamp&access_token=${token}`);
-          const items = d.data||[];
-          const inner = document.createElement('div');
-          inner.className = 'reply-inner';
-          if(!items.length){
-            inner.textContent = '댓글 없음';
-            inner.style.cssText='color:var(--text2);font-size:11px';
-          } else {
-            items.forEach(r=>{
-              const div=document.createElement('div');
-              div.className='reply-item';
-              div.innerHTML=`<span class="reply-u">@${r.username||'?'}</span><span>${r.text||''}</span><span class="reply-t">${fmtDT(r.timestamp)}</span>`;
-              inner.appendChild(div);
-            });
-          }
-          repliesDiv.innerHTML='';
-          repliesDiv.appendChild(inner);
-        } catch(e){
-          repliesDiv.innerHTML=`<div class="reply-inner" style="color:var(--danger);font-size:11px">오류: ${e.message}</div>`;
+      if(!isOpen) return;
+      if(repliesLoaded) return;
+      repliesDiv.innerHTML = '<div class="reply-inner" style="color:var(--text2);font-size:12px;padding:10px 13px">불러오는 중...</div>';
+      const token = curToken();
+      if(!token){
+        repliesDiv.innerHTML = '<div class="reply-inner" style="color:var(--danger);font-size:12px;padding:10px 13px">토큰 없음</div>';
+        return;
+      }
+      try{
+        const url = `${API}/${post.id}/replies?fields=id,text,username,timestamp&access_token=${token}`;
+        const r = await fetch(url);
+        if(!r.ok){
+          const j = await r.json().catch(()=>({}));
+          throw new Error(j.error?.message || `HTTP ${r.status}`);
         }
+        const d = await r.json();
+        const items = (d.data || []).filter(x => !x.hide_status || x.hide_status === 'NOT_HUSHED');
+        repliesLoaded = true;
+        const inner = document.createElement('div');
+        inner.className = 'reply-inner';
+        if(!items.length){
+          inner.innerHTML = '<span style="color:var(--text2);font-size:12px">댓글 없음</span>';
+        } else {
+          items.forEach(rep => {
+            const div = document.createElement('div');
+            div.className = 'reply-item';
+            div.innerHTML = `<span class="reply-u">@${rep.username||'?'}</span><span>${rep.text||''}</span><span class="reply-t">${fmtDT(rep.timestamp)}</span>`;
+            inner.appendChild(div);
+          });
+        }
+        repliesDiv.innerHTML = '';
+        repliesDiv.appendChild(inner);
+      } catch(e){
+        repliesDiv.innerHTML = `<div class="reply-inner" style="color:var(--danger);font-size:11px;padding:10px 13px">오류: ${e.message||String(e)}</div>`;
       }
     };
     acts.appendChild(btn);
