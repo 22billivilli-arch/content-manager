@@ -406,6 +406,57 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
   .wrap{padding:14px;}
 }
 
+/* ── SECTION 4 (CP 변환) ── */
+.sec4{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-top:16px;}
+.cp-settings-panel{padding:16px 18px;border-bottom:1px solid var(--border);display:none;}
+.cp-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.cp-label{display:block;font-size:11px;color:var(--text2);margin-bottom:5px;}
+.cp-input{
+  width:100%;background:var(--bg3);border:1px solid var(--border2);
+  color:var(--text);font-family:inherit;font-size:13px;
+  padding:9px 11px;border-radius:var(--r2);outline:none;transition:border-color .2s;
+}
+.cp-input:focus{border-color:var(--accent);}
+.cp-textarea{
+  width:100%;background:var(--bg3);border:1px solid var(--border2);
+  color:var(--text);font-family:inherit;font-size:13px;
+  padding:10px 12px;border-radius:var(--r2);outline:none;
+  resize:vertical;min-height:72px;transition:border-color .2s;
+}
+.cp-textarea:focus{border-color:var(--accent);}
+.cp-btn{
+  margin-top:12px;width:100%;padding:12px;border:none;border-radius:var(--r2);
+  background:#e52228;color:#fff;font-family:inherit;font-size:14px;font-weight:700;
+  cursor:pointer;transition:opacity .2s;
+}
+.cp-btn:hover{opacity:.85;}
+.cp-btn:disabled{opacity:.5;cursor:not-allowed;}
+.cp-save-btn{
+  margin-top:12px;padding:8px 20px;border:none;border-radius:var(--r2);
+  background:var(--accent);color:#000;font-family:inherit;font-size:12px;font-weight:700;
+  cursor:pointer;transition:opacity .2s;
+}
+.cp-save-btn:hover{opacity:.85;}
+.cp-result{
+  margin-top:12px;padding:11px 13px;border-radius:var(--r2);
+  font-size:13px;word-break:break-all;line-height:1.6;
+  border:1px solid var(--border2);background:var(--bg3);color:var(--text);
+}
+.cp-result.ok{border-color:var(--accent);background:var(--accent-dim2);color:var(--accent);}
+.cp-result.err{border-color:var(--danger);background:rgba(255,85,85,.06);color:var(--danger);}
+.cp-copy-btn{
+  margin-top:8px;width:100%;padding:10px;border:1.5px solid var(--accent);
+  border-radius:var(--r2);background:transparent;color:var(--accent);
+  font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .2s;
+}
+.cp-copy-btn:hover{background:var(--accent-dim);}
+.cp-badge{
+  font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;
+  background:var(--danger);color:#fff;
+}
+.cp-badge.ok{background:var(--accent);color:#000;}
+@media(max-width:680px){.cp-grid{grid-template-columns:1fr;}}
+
 /* ── CHECKLIST MOBILE ── */
 @media(max-width:680px){
   .cl-table thead{display:none;}
@@ -509,6 +560,47 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
       <div class="feed-empty">
         <div class="ico">📱</div>
         <p>계정을 선택하면 게시물을 불러옵니다</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: 쿠팡 파트너스 변환 -->
+  <div class="sec4">
+    <div class="sec3-head">
+      <div class="sec3-head-l">
+        <span class="sec3-title">🔗 쿠팡 파트너스 변환</span>
+        <span id="cpKeyBadge" class="cp-badge">미설정</span>
+      </div>
+      <button class="btn-refresh" id="cpSettingsBtn">⚙️ API 키</button>
+    </div>
+
+    <!-- API 키 설정 패널 -->
+    <div class="cp-settings-panel" id="cpSettingsPanel">
+      <div class="cp-grid">
+        <div>
+          <div class="cp-label">Access Key</div>
+          <input type="text" id="cpAccess" class="cp-input" placeholder="쿠팡 파트너스 Access Key">
+        </div>
+        <div>
+          <div class="cp-label">Secret Key</div>
+          <input type="password" id="cpSecret" class="cp-input" placeholder="Secret Key">
+        </div>
+        <div>
+          <div class="cp-label">Sub ID <span style="color:var(--text3)">(선택)</span></div>
+          <input type="text" id="cpSubId" class="cp-input" placeholder="예: instagram">
+        </div>
+      </div>
+      <button class="cp-save-btn" id="cpSaveBtn">저장</button>
+    </div>
+
+    <!-- 변환 영역 -->
+    <div style="padding:16px 18px;">
+      <div class="cp-label">쿠팡 상품 URL (단축링크도 가능)</div>
+      <textarea id="cpUrl" class="cp-textarea" placeholder="https://www.coupang.com/vp/products/...&#10;또는 https://coupang.com/a/..."></textarea>
+      <button class="cp-btn" id="cpConvertBtn">파트너스 링크로 변환</button>
+      <div id="cpResultArea" style="display:none">
+        <div id="cpResultBox" class="cp-result"></div>
+        <button id="cpCopyBtn" class="cp-copy-btn" style="display:none">복사</button>
       </div>
     </div>
   </div>
@@ -1418,6 +1510,111 @@ async function dlMedia(url, filename){
 // ═══════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  CP 변환
+// ═══════════════════════════════════════════════
+const CP_API = 'https://cp-converter.vercel.app/api/deeplink';
+let cpResultUrl = '';
+
+function cpInit(){
+  const access = localStorage.getItem('coupang_access');
+  const secret = localStorage.getItem('coupang_secret');
+  const sub    = localStorage.getItem('coupang_subid') || '';
+  const badge  = document.getElementById('cpKeyBadge');
+  if(access && secret){
+    badge.textContent = '키 저장됨';
+    badge.className   = 'cp-badge ok';
+    document.getElementById('cpAccess').value = access;
+    document.getElementById('cpSecret').value = secret;
+    document.getElementById('cpSubId').value  = sub;
+  } else {
+    badge.textContent = '미설정';
+    badge.className   = 'cp-badge';
+    document.getElementById('cpSettingsPanel').style.display = 'block';
+  }
+}
+
+document.getElementById('cpSettingsBtn').onclick = () => {
+  const p = document.getElementById('cpSettingsPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+};
+
+document.getElementById('cpSaveBtn').onclick = () => {
+  const access = document.getElementById('cpAccess').value.trim();
+  const secret = document.getElementById('cpSecret').value.trim();
+  const sub    = document.getElementById('cpSubId').value.trim();
+  if(!access || !secret){ toast('Access Key와 Secret Key를 모두 입력해주세요'); return; }
+  localStorage.setItem('coupang_access', access);
+  localStorage.setItem('coupang_secret', secret);
+  if(sub) localStorage.setItem('coupang_subid', sub);
+  else localStorage.removeItem('coupang_subid');
+  const badge = document.getElementById('cpKeyBadge');
+  badge.textContent = '키 저장됨';
+  badge.className   = 'cp-badge ok';
+  document.getElementById('cpSettingsPanel').style.display = 'none';
+  toast('API 키 저장됨 ✓', true);
+};
+
+document.getElementById('cpConvertBtn').onclick = async () => {
+  const access = localStorage.getItem('coupang_access');
+  const secret = localStorage.getItem('coupang_secret');
+  if(!access || !secret){
+    document.getElementById('cpSettingsPanel').style.display = 'block';
+    toast('먼저 API 키를 설정해주세요');
+    return;
+  }
+  const url = document.getElementById('cpUrl').value.trim();
+  if(!url){ toast('쿠팡 상품 URL을 입력해주세요'); return; }
+
+  const btn = document.getElementById('cpConvertBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> 변환 중...';
+  document.getElementById('cpResultArea').style.display = 'none';
+
+  try{
+    const resp = await fetch(CP_API, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url, accessKey:access, secretKey:secret, subId:localStorage.getItem('coupang_subid')||''})
+    });
+    const data = await resp.json();
+    const box  = document.getElementById('cpResultBox');
+    document.getElementById('cpResultArea').style.display = 'block';
+
+    if(data.rCode==='0' && data.data?.[0]){
+      cpResultUrl = data.data[0].shortenUrl || data.data[0].landingUrl;
+      box.className   = 'cp-result ok';
+      box.textContent = cpResultUrl;
+      document.getElementById('cpCopyBtn').style.display = 'block';
+    } else {
+      cpResultUrl = '';
+      box.className   = 'cp-result err';
+      box.textContent = '오류: ' + (data.rMessage || JSON.stringify(data));
+      document.getElementById('cpCopyBtn').style.display = 'none';
+    }
+  } catch(e){
+    document.getElementById('cpResultArea').style.display = 'block';
+    document.getElementById('cpResultBox').className   = 'cp-result err';
+    document.getElementById('cpResultBox').textContent = '서버 오류: ' + e.message;
+    document.getElementById('cpCopyBtn').style.display = 'none';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '파트너스 링크로 변환';
+  }
+};
+
+document.getElementById('cpCopyBtn').onclick = async () => {
+  if(!cpResultUrl) return;
+  try{
+    await navigator.clipboard.writeText(cpResultUrl);
+    const btn = document.getElementById('cpCopyBtn');
+    btn.textContent = '✅ 복사됨!';
+    setTimeout(()=>{ btn.textContent='복사'; }, 2000);
+  } catch {
+    prompt('아래 링크를 복사하세요:', cpResultUrl);
+  }
+};
+
 (function init(){
   // 토큰 미설정 시 자동 주입
   const DEFAULT_TOKEN = 'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD';
@@ -1430,6 +1627,7 @@ async function dlMedia(url, filename){
   renderCL();
   renderAccTabs();
   renderMainTabs();
+  cpInit();
   loadFeed();
 })();
 </script>
