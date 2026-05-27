@@ -875,7 +875,7 @@ function toggleFav(post){
   let favs = getFavs();
   const idx = favs.findIndex(f=>f.id===post.id);
   if(idx>=0){ favs.splice(idx,1); toast('즐겨찾기 해제'); }
-  else { favs.unshift({...post, _fav_at: Date.now()}); toast('⭐ 즐겨찾기 저장', true); }
+  else { favs.unshift({...post, _fav_at: Date.now(), _acc_name: tUser?.username}); toast('⭐ 즐겨찾기 저장', true); }
   saveFavs(favs);
   return idx < 0; // true = starred
 }
@@ -1157,7 +1157,7 @@ async function loadViewsBg(posts, token){
 function makeCard(post, children){
   const card = document.createElement('div');
   card.className = 'post-card';
-  const uname = tUser?.username||'user';
+  const uname = post._acc_name || tUser?.username || 'user';
   const ini = uname.slice(0,2).toUpperCase();
 
   // top
