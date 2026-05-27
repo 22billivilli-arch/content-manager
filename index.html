@@ -37,12 +37,26 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 /* ── HEADER ── */
 .header{
   background:var(--bg2);border-bottom:1px solid var(--border);
-  padding:14px 24px;display:flex;align-items:center;justify-content:space-between;
   position:sticky;top:0;z-index:200;
 }
+.header-row1{padding:12px 20px;display:flex;align-items:center;justify-content:space-between;}
 .header-left{display:flex;flex-direction:column;gap:2px;}
 .header-title{font-size:18px;font-weight:700;color:var(--accent);letter-spacing:-.5px;}
 .header-date{font-size:12px;color:var(--text2);}
+
+/* ── TOP NAV ── */
+.top-nav{
+  display:flex;gap:0;overflow-x:auto;
+  border-top:1px solid var(--border);padding:0 16px;
+}
+.top-nav::-webkit-scrollbar{height:0;}
+.top-nav-btn{
+  padding:9px 15px;background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;
+  white-space:nowrap;transition:color .15s,border-color .15s;
+}
+.top-nav-btn:hover{color:var(--text);}
+.top-nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700;}
 .btn-token{
   background:var(--accent-dim);color:var(--accent);
   border:1px solid rgba(0,212,170,.35);padding:7px 14px;
@@ -510,17 +524,20 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 
 <!-- HEADER -->
 <header class="header">
-  <div class="header-left">
-    <div class="header-title">📋 콘텐츠 매니저</div>
-    <div class="header-date" id="hDate"></div>
+  <div class="header-row1">
+    <div class="header-left">
+      <div class="header-title">📋 콘텐츠 매니저</div>
+      <div class="header-date" id="hDate"></div>
+    </div>
+    <button class="btn-token" id="btnToken">🔑 토큰 설정</button>
   </div>
-  <button class="btn-token" id="btnToken">🔑 토큰 설정</button>
+  <nav class="top-nav" id="topNav"></nav>
 </header>
 
 <div class="wrap">
 
-  <!-- SECTION 2 -->
-  <div class="sec2">
+  <!-- SECTION 2: 스케줄러 -->
+  <div class="sec2" id="pageSched">
 
     <!-- Checklist -->
     <div class="checklist-panel">
@@ -554,17 +571,11 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 
   </div>
 
-  <!-- SECTION 3 -->
-  <div class="sec3">
-    <div class="sec3-head">
-      <div class="sec3-head-l">
-        <span class="sec3-title">Threads</span>
-        <div class="main-tabs" id="mainTabs"></div>
-      </div>
-      <div id="feedControls" style="display:flex;gap:8px;align-items:center;">
-        <div class="acc-tabs" id="accTabs"></div>
-        <button class="btn-refresh" id="btnRefresh">↻ 새로고침</button>
-      </div>
+  <!-- SECTION 3: 피드/즐겨찾기/쿠파스/영상 -->
+  <div class="sec3" id="pageThreads" style="display:none;">
+    <div class="sec3-head" id="feedControls" style="display:none;">
+      <div class="acc-tabs" id="accTabs"></div>
+      <button class="btn-refresh" id="btnRefresh">↻ 새로고침</button>
     </div>
     <div class="feed-wrap" id="feedWrap">
       <div class="feed-empty">
@@ -635,7 +646,7 @@ let tUser     = null;
 let nextCur   = null;
 let allPosts  = [];
 let curAccIdx = 0;
-let mainTab   = 'feed'; // 'feed' | 'favs' | 'cp' | 'vd'
+let curPage   = 'sched'; // 'sched' | 'feed' | 'favs' | 'cp' | 'vd'
 
 // ═══════════════════════════════════════════════
 //  HELPERS
@@ -876,47 +887,50 @@ document.getElementById('btnMdSave').onclick = async () => {
   renderAccTabs();
   await loadFeed();
 };
-document.getElementById('btnRefresh').onclick = () => { mainTab='feed'; renderMainTabs(); loadFeed(); };
+document.getElementById('btnRefresh').onclick = () => loadFeed();
 
-// ── 메인 탭 ──────────────────────────────────────
-function renderMainTabs(){
-  const wrap = document.getElementById('mainTabs');
-  wrap.innerHTML = '';
+// ── 탑 네비게이션 ─────────────────────────────────
+function switchPage(page){
+  curPage = page;
+  renderTopNav();
+  const pageSched   = document.getElementById('pageSched');
+  const pageThreads = document.getElementById('pageThreads');
+  const fc          = document.getElementById('feedControls');
+  if(page === 'sched'){
+    pageSched.style.display   = '';
+    pageThreads.style.display = 'none';
+  } else {
+    pageSched.style.display   = 'none';
+    pageThreads.style.display = '';
+    if(page === 'feed'){
+      fc.style.display = 'flex';
+      loadFeed();
+    } else {
+      fc.style.display = 'none';
+      if(page === 'favs')    renderFavsTab();
+      else if(page === 'cp') renderCpTab();
+      else                   renderVideoTab();
+    }
+  }
+}
+
+function renderTopNav(){
+  const nav = document.getElementById('topNav');
+  nav.innerHTML = '';
   const tabs = [
-    {id:'feed', label:'피드'},
-    {id:'favs', label:'⭐ 즐겨찾기'},
-    {id:'cp',   label:'🔗 CP변환'},
-    {id:'vd',   label:'📥 영상'},
+    {id:'sched', label:'📋 스케줄러'},
+    {id:'feed',  label:'📱 피드'},
+    {id:'favs',  label:'⭐ 즐겨찾기'},
+    {id:'cp',    label:'🔗 쿠파스변환'},
+    {id:'vd',    label:'📥 영상다운로드'},
   ];
   tabs.forEach(t => {
     const btn = document.createElement('button');
-    btn.className = 'main-tab'
-      + (t.id==='favs' ? ' fav-tab' : '')
-      + (t.id==='cp'   ? ' cp-tab'  : '')
-      + (t.id==='vd'   ? ' vd-tab'  : '')
-      + (mainTab===t.id ? ' active' : '');
+    btn.className = 'top-nav-btn' + (curPage===t.id ? ' active' : '');
     btn.textContent = t.label;
-    btn.onclick = () => {
-      mainTab = t.id;
-      renderMainTabs();
-      const fc = document.getElementById('feedControls');
-      if(t.id === 'feed'){
-        fc.style.display = 'flex';
-        loadFeed();
-      } else if(t.id === 'favs'){
-        fc.style.display = 'none';
-        renderFavsTab();
-      } else if(t.id === 'cp'){
-        fc.style.display = 'none';
-        renderCpTab();
-      } else {
-        fc.style.display = 'none';
-        renderVideoTab();
-      }
-    };
-    wrap.appendChild(btn);
+    btn.onclick = () => switchPage(t.id);
+    nav.appendChild(btn);
   });
-  document.getElementById('feedControls').style.display = mainTab==='feed' ? 'flex' : 'none';
 }
 
 // ── 계정 탭 ──────────────────────────────────────
@@ -936,7 +950,6 @@ function renderAccTabs(){
         return;
       }
       curAccIdx = i;
-      showFavs = false;
       renderAccTabs();
       loadFeed();
     };
@@ -1770,8 +1783,7 @@ function renderVideoTab(){
   renderCal();
   renderCL();
   renderAccTabs();
-  renderMainTabs();
-  loadFeed();
+  renderTopNav();
 })();
 </script>
 </body>
