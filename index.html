@@ -316,11 +316,13 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 
 /* ── FAV STAR ON CARD ── */
 .card-fav-btn{
-  background:none;border:none;cursor:pointer;font-size:16px;
-  padding:2px 4px;line-height:1;transition:transform .15s;color:var(--text3);
+  background:none;border:none;cursor:pointer;font-size:17px;
+  padding:2px 4px;line-height:1;transition:transform .15s, color .15s;
+  color:var(--text3);font-family:inherit;
 }
-.card-fav-btn:hover{transform:scale(1.2);}
+.card-fav-btn:hover{transform:scale(1.25);color:var(--text2);}
 .card-fav-btn.starred{color:#f5c518;}
+.card-fav-btn.starred:hover{color:#ffd700;}
 
 /* ── MODAL ── */
 .modal-bg{
@@ -834,7 +836,7 @@ async function loadFeed(){
     tUser = user;
 
     const data = await apiFetch(
-      `${API}/${user.id}/threads?fields=id,text,media_type,media_url,thumbnail_url,timestamp,permalink,like_count,replies_count,views&limit=20&access_token=${token}`
+      `${API}/${user.id}/threads?fields=id,text,media_type,media_url,thumbnail_url,timestamp,permalink,like_count,replies_count,has_replies,views&limit=20&access_token=${token}`
     );
     allPosts = data.data || [];
     nextCur = data.paging?.cursors?.after || null;
@@ -870,7 +872,7 @@ async function loadMore(){
   if(!token||!tUser||!nextCur) return;
   try{
     const data = await apiFetch(
-      `${API}/${tUser.id}/threads?fields=id,text,media_type,media_url,thumbnail_url,timestamp,permalink,like_count,replies_count,views&limit=20&after=${nextCur}&access_token=${token}`
+      `${API}/${tUser.id}/threads?fields=id,text,media_type,media_url,thumbnail_url,timestamp,permalink,like_count,replies_count,has_replies,views&limit=20&after=${nextCur}&access_token=${token}`
     );
     const more = data.data || [];
     nextCur = data.paging?.cursors?.after || null;
@@ -943,12 +945,14 @@ function makeCard(post, children){
   topRight.style.cssText = 'display:flex;align-items:center;gap:6px;';
 
   const favBtn = document.createElement('button');
-  favBtn.className = 'card-fav-btn' + (isFav(post.id) ? ' starred' : '');
-  favBtn.textContent = '⭐';
+  const _initStarred = isFav(post.id);
+  favBtn.className = 'card-fav-btn' + (_initStarred ? ' starred' : '');
+  favBtn.textContent = _initStarred ? '★' : '☆';
   favBtn.title = '즐겨찾기';
   favBtn.onclick = () => {
     const nowStarred = toggleFav(post);
     favBtn.className = 'card-fav-btn' + (nowStarred ? ' starred' : '');
+    favBtn.textContent = nowStarred ? '★' : '☆';
   };
   topRight.appendChild(favBtn);
 
@@ -990,6 +994,7 @@ function makeCard(post, children){
   const stats = document.createElement('div');
   stats.className = 'card-stats';
   const li = post.like_count||0, re=post.replies_count||0, vi=post.views||0;
+  const hasReplies = re > 0 || post.has_replies;
   stats.innerHTML = `
     <span class="stat">❤️ ${li.toLocaleString()}</span>
     <span class="stat">💬 ${re.toLocaleString()}</span>
@@ -1023,10 +1028,10 @@ function makeCard(post, children){
   repliesDiv.className = 'replies';
   let repliesLoaded = false;
 
-  if(re > 0){
+  if(hasReplies){
     const btn = document.createElement('button');
     btn.className = 'act-btn';
-    btn.innerHTML = `💬 댓글 ${re}`;
+    btn.innerHTML = re > 0 ? `💬 댓글 ${re}` : '💬 댓글';
     btn.onclick = async () => {
       const isOpen = repliesDiv.classList.toggle('open');
       if(isOpen && !repliesLoaded){
