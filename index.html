@@ -316,11 +316,15 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 .main-tab.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:600;}
 .main-tab.fav-tab.active{background:#f5c518;border-color:#f5c518;color:#000;}
 .main-tab.cp-tab.active{background:#ff6b35;border-color:#ff6b35;color:#fff;}
+.main-tab.vd-tab.active{background:#7c3aed;border-color:#7c3aed;color:#fff;}
 
-/* ── CP TAB WRAP ── */
+/* ── CP / VD TAB WRAP ── */
 .cp-tab-wrap{max-width:600px;margin:24px auto;padding:0 8px;}
 .cp-head-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
 .cp-head-title{font-size:15px;font-weight:600;flex:1;}
+.vd-preview{width:100%;border-radius:var(--r2);background:#000;max-height:360px;}
+.vd-dl-row{display:flex;gap:8px;margin-top:10px;}
+.vd-dl-row .cp-btn{flex:1;margin-top:0;}
 
 /* ── PUBLISH BAR ── */
 .pub-bar{
@@ -631,7 +635,7 @@ let tUser     = null;
 let nextCur   = null;
 let allPosts  = [];
 let curAccIdx = 0;
-let mainTab   = 'feed'; // 'feed' | 'favs' | 'cp'
+let mainTab   = 'feed'; // 'feed' | 'favs' | 'cp' | 'vd'
 
 // ═══════════════════════════════════════════════
 //  HELPERS
@@ -882,12 +886,14 @@ function renderMainTabs(){
     {id:'feed', label:'피드'},
     {id:'favs', label:'⭐ 즐겨찾기'},
     {id:'cp',   label:'🔗 CP변환'},
+    {id:'vd',   label:'📥 영상'},
   ];
   tabs.forEach(t => {
     const btn = document.createElement('button');
     btn.className = 'main-tab'
       + (t.id==='favs' ? ' fav-tab' : '')
       + (t.id==='cp'   ? ' cp-tab'  : '')
+      + (t.id==='vd'   ? ' vd-tab'  : '')
       + (mainTab===t.id ? ' active' : '');
     btn.textContent = t.label;
     btn.onclick = () => {
@@ -900,9 +906,12 @@ function renderMainTabs(){
       } else if(t.id === 'favs'){
         fc.style.display = 'none';
         renderFavsTab();
-      } else {
+      } else if(t.id === 'cp'){
         fc.style.display = 'none';
         renderCpTab();
+      } else {
+        fc.style.display = 'none';
+        renderVideoTab();
       }
     };
     wrap.appendChild(btn);
@@ -1614,6 +1623,138 @@ function renderCpTab(){
       setTimeout(()=>{ btn.textContent='복사'; }, 2000);
     } catch {
       prompt('아래 링크를 복사하세요:', resultUrl);
+    }
+  };
+}
+
+// ── 영상 다운로드 탭 ────────────────────────────────
+function extractVideoUrl(html){
+  // og:video
+  let m = html.match(/<meta[^>]+property="og:video(?::url)?"[^>]+content="([^"]+)"/i)
+           || html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:video(?::url)?"/i);
+  if(m) return m[1];
+  // JSON video_url field
+  m = html.match(/"video_url"\s*:\s*"(https:[^"]+\.mp4[^"]*)"/);
+  if(m) return m[1].replace(/\\u0026/g,'&').replace(/\\/g,'');
+  // PlaybackURL
+  m = html.match(/"PlaybackURL"\s*:\s*"(https:[^"]+)"/);
+  if(m) return m[1].replace(/\\u0026/g,'&').replace(/\\/g,'');
+  // CDN mp4 URL
+  m = html.match(/https:\/\/[a-z0-9\-]+\.cdninstagram\.com[^\s"'<>]+\.mp4[^\s"'<>]*/);
+  if(m) return m[0];
+  // scontent mp4
+  m = html.match(/https:\/\/scontent[^\s"'<>]+\.mp4[^\s"'<>]*/);
+  if(m) return m[0];
+  return null;
+}
+
+function renderVideoTab(){
+  const fw = document.getElementById('feedWrap');
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  fw.innerHTML = `
+    <div class="cp-tab-wrap">
+      <div class="cp-head-row">
+        <span class="cp-head-title">📥 Threads 영상 다운로드</span>
+      </div>
+      <div>
+        <div class="cp-label">Threads 게시물 URL</div>
+        <input class="cp-input" id="_vdUrl" type="url"
+          placeholder="https://www.threads.net/@username/post/..."
+          style="width:100%;font-size:13px;">
+        <button class="cp-btn" id="_vdFetchBtn" style="margin-top:10px;">영상 가져오기</button>
+      </div>
+      <div id="_vdResult" style="display:none;margin-top:16px;">
+        <video class="vd-preview" id="_vdPreview" controls playsinline></video>
+        <div class="vd-dl-row">
+          <button class="cp-btn" id="_vdDownBtn">📥 다운로드</button>
+          <button class="cp-btn" id="_vdShareBtn" style="background:var(--bg4);color:var(--text);border:1px solid var(--border2);">📤 공유 / 저장</button>
+        </div>
+        <p style="font-size:11px;color:var(--text2);margin-top:8px;text-align:center;">
+          ${isIOS ? 'iOS: 공유/저장 버튼 또는 영상을 길게 눌러 저장하세요' : 'Android: 다운로드 버튼으로 갤러리에 저장'}
+        </p>
+      </div>
+      <div id="_vdErr" style="display:none;margin-top:12px;" class="cp-result err"></div>
+    </div>
+  `;
+
+  let rawVideoUrl = '';
+  const q = id => fw.querySelector('#' + id);
+
+  q('_vdFetchBtn').onclick = async () => {
+    const inputUrl = q('_vdUrl').value.trim();
+    if(!inputUrl){ toast('Threads URL을 입력해주세요'); return; }
+    const btn = q('_vdFetchBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> 분석 중...';
+    q('_vdResult').style.display = 'none';
+    q('_vdErr').style.display = 'none';
+    try{
+      const r = await fetch(PROXY + encodeURIComponent(inputUrl));
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const html = await r.text();
+      rawVideoUrl = extractVideoUrl(html);
+      if(!rawVideoUrl) throw new Error('영상 URL을 찾을 수 없습니다. 영상이 포함된 게시물인지 확인해주세요.');
+      // preview via proxy (avoids CORS on CDN)
+      const preview = q('_vdPreview');
+      preview.src = PROXY + encodeURIComponent(rawVideoUrl);
+      q('_vdResult').style.display = 'block';
+    } catch(e){
+      q('_vdErr').style.display = 'block';
+      q('_vdErr').textContent = '오류: ' + e.message;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '영상 가져오기';
+    }
+  };
+
+  q('_vdDownBtn').onclick = async () => {
+    if(!rawVideoUrl) return;
+    const btn = q('_vdDownBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> 준비 중...';
+    try{
+      const r = await fetch(PROXY + encodeURIComponent(rawVideoUrl));
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = await r.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = 'threads_' + Date.now() + '.mp4';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+      toast('다운로드 시작 ✓', true);
+    } catch(e){
+      toast('다운로드 실패: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '📥 다운로드';
+    }
+  };
+
+  q('_vdShareBtn').onclick = async () => {
+    if(!rawVideoUrl) return;
+    if(!navigator.share){ toast('이 브라우저는 공유를 지원하지 않습니다'); return; }
+    const btn = q('_vdShareBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> 준비 중...';
+    try{
+      const r = await fetch(PROXY + encodeURIComponent(rawVideoUrl));
+      const blob = await r.blob();
+      const file = new File([blob], 'threads_video.mp4', {type: 'video/mp4'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:'Threads 영상'});
+      } else {
+        await navigator.share({url: rawVideoUrl, title:'Threads 영상'});
+      }
+    } catch(e){
+      if(!e.message.includes('AbortError') && !e.name.includes('AbortError'))
+        toast('공유 실패: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '📤 공유 / 저장';
     }
   };
 }
