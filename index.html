@@ -456,6 +456,7 @@ const COLS = [
   {id:'c4', ph:'메모...'},
 ];
 const API = 'https://graph.threads.net/v1.0';
+const PROXY = 'https://corsproxy.io/?url=';
 const DOW = ['일','월','화','수','목','금','토'];
 const MON = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
 
@@ -705,13 +706,23 @@ document.getElementById('btnRefresh').onclick = () => loadFeed();
 //  THREADS API
 // ═══════════════════════════════════════════════
 async function apiFetch(url){
-  const r = await fetch(url);
-  if(!r.ok){
-    let msg = `HTTP ${r.status}`;
-    try{ const j=await r.json(); msg=j.error?.message||msg; } catch(e){}
-    throw new Error(msg);
+  // 직접 호출 시도 → 실패하면 CORS 프록시 경유
+  const attempts = [url, PROXY + encodeURIComponent(url)];
+  let lastErr;
+  for(const target of attempts){
+    try{
+      const r = await fetch(target);
+      if(!r.ok){
+        let msg = `HTTP ${r.status}`;
+        try{ const j=await r.json(); msg=j.error?.message||msg; }catch(e){}
+        throw new Error(msg);
+      }
+      return r.json();
+    } catch(e){
+      lastErr = e;
+    }
   }
-  return r.json();
+  throw lastErr;
 }
 
 async function loadFeed(){
