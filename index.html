@@ -536,6 +536,7 @@ const MON = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10�
 // ═══════════════════════════════════════════════
 const FEED_ACCOUNTS = [
   { name:'dnfkagksekfkawnl', token:'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD' },
+  { name:'ddack.life',       token:'THAALYAgagxE1BYlpmcmlRdk5yVER2TEtBalhwRkNZAcUpTNUlWUk5kR21TM01lNFRjZAkxOSG9kMzRhYWF3MFlFWWtybXZAXVTdfY1Fqa1pZAQU5ma3ZAEWXpZAb0ZAncXoyZA0N6TlFKenJIRlJVSURtLXUzZAjgxREg1YWhxMXg3ai1QNnpZAZA2tEWE5UZAXFIV09RVWcZD' },
   { name:'sou.0921',         token:'THAALYAgagxE1BYmJHUmw3eGNaTEJhZAi1kQTNzbzhFNlRHd1ZA4b1V4cjlaX25DREF5ZAm1ENTVZATHBkZAENuRHJVTzFFUm5GR292OV9XTkpnX3A3Nm9JMXpJd1oxcDg5Wk0za3FjUHR4SHlsSG9mYkN1Ql9SMXhGV1JrY0RZARjRyU040TWU3Mks1cXA4NFZAhRjgZD' },
   { name:'hunya.pick',       token: localStorage.getItem('token_hunya') || null },
 ];
@@ -1104,7 +1105,7 @@ function makeCard(post, children){
   }
 
   card.appendChild(acts);
-  if(re>0) card.appendChild(repliesDiv);
+  if(hasReplies) card.appendChild(repliesDiv);
   return card;
 }
 
