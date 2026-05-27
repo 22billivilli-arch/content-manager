@@ -382,6 +382,44 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
   .sec2{grid-template-columns:1fr;}
   .wrap{padding:14px;}
 }
+
+/* ── CHECKLIST MOBILE ── */
+@media(max-width:680px){
+  .cl-table thead{display:none;}
+  .cl-table,.cl-table tbody{display:block;}
+  .cl-table tr{
+    display:flex;flex-wrap:wrap;
+    border-bottom:1px solid var(--border);
+  }
+  .cl-table tr:last-child{border-bottom:none;}
+  .cl-table td{border-right:none;border-bottom:none;}
+  /* account cell — full width */
+  .cl-table td:first-child{
+    width:100%;
+    border-bottom:1px solid var(--border);
+    background:var(--bg3);
+  }
+  /* task cells — equal 1/3 width */
+  .cl-table td[data-label]{
+    flex:1;min-width:0;
+    border-right:1px solid var(--border);
+    display:flex;flex-direction:column;
+  }
+  .cl-table td[data-label]:last-child{border-right:none;}
+  /* short label above each task cell */
+  .cl-table td[data-label]::before{
+    content:attr(data-label);
+    display:block;
+    font-size:10px;color:var(--text3);
+    padding:4px 6px;
+    border-bottom:1px solid var(--border);
+    background:var(--bg3);
+    text-align:center;white-space:nowrap;
+  }
+  .task-cell{padding:6px 5px;gap:5px;flex:1;}
+  .memo-inp{font-size:10px;}
+  .acc-cell{padding:8px 10px;}
+}
 </style>
 </head>
 <body>
@@ -484,9 +522,9 @@ const ACCOUNTS = [
   {id:'F', name:''},
 ];
 const COLS = [
-  {id:'c2', ph:'메모...'},
-  {id:'c3', ph:'메모...'},
-  {id:'c4', ph:'메모...'},
+  {id:'c2', ph:'메모...', label:'☀️ 1차'},
+  {id:'c3', ph:'메모...', label:'🎬 탐색'},
+  {id:'c4', ph:'메모...', label:'🌙 2차'},
 ];
 const API = 'https://graph.threads.net/v1.0';
 const PROXY = 'https://corsproxy.io/?';
@@ -554,13 +592,13 @@ function renderHeader(){
 // ═══════════════════════════════════════════════
 function renderCL(){
   const data = loadCl(selDate);
-  const ro   = isRO(selDate);
+  const ro   = false;
   const isToday = selDate === today();
 
   let lbl = fmtDate(selDate);
   if(isToday) lbl += ' (오늘)';
   document.getElementById('clLabel').textContent = '📋 ' + lbl;
-  document.getElementById('roBadge').style.display = ro ? 'inline-block' : 'none';
+  document.getElementById('roBadge').style.display = 'none';
 
   const tbody = document.getElementById('clBody');
   tbody.innerHTML = '';
@@ -601,6 +639,7 @@ function renderCL(){
       const key = acc.id + '-' + col.id;
       const cell = data[key] || {checked:false, memo:''};
       const td = document.createElement('td');
+      td.dataset.label = col.label;
 
       const div = document.createElement('div');
       div.className = 'task-cell' + (cell.checked ? ' is-checked' : '');
