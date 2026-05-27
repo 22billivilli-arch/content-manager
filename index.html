@@ -1084,12 +1084,7 @@ function makeCard(post, children){
       }
       try{
         const url = `${API}/${post.id}/replies?fields=id,text,username,timestamp&access_token=${token}`;
-        const r = await fetch(url);
-        if(!r.ok){
-          const j = await r.json().catch(()=>({}));
-          throw new Error(j.error?.message || `HTTP ${r.status}`);
-        }
-        const d = await r.json();
+        const d = await apiFetch(url);
         const items = (d.data || []).filter(x => !x.hide_status || x.hide_status === 'NOT_HUSHED');
         repliesLoaded = true;
         const inner = document.createElement('div');
