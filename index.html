@@ -954,6 +954,9 @@ async function buildFeed(posts, append){
     grid.appendChild(makeCard(post, children));
   }
 
+  // 조회수 백그라운드 로드 (insights API)
+  loadViewsBg(posts, curToken());
+
   if(nextCur){
     const lm = document.createElement('div');
     lm.className = 'load-more';
@@ -964,6 +967,20 @@ async function buildFeed(posts, append){
     lm.appendChild(btn);
     fw.appendChild(lm);
   }
+}
+
+async function loadViewsBg(posts, token){
+  if(!token || !posts.length) return;
+  const results = await Promise.allSettled(
+    posts.map(p => apiFetch(`${API}/${p.id}/insights?metric=views&access_token=${token}`))
+  );
+  results.forEach((r, i) => {
+    if(r.status !== 'fulfilled') return;
+    const val = r.value?.data?.[0]?.values?.[0]?.value;
+    if(val == null) return;
+    const el = document.getElementById(`vs_${posts[i].id}`);
+    if(el){ el.textContent = `👁️ ${Number(val).toLocaleString()}`; el.style.opacity='1'; }
+  });
 }
 
 function makeCard(post, children){
@@ -1033,12 +1050,12 @@ function makeCard(post, children){
   // stats
   const stats = document.createElement('div');
   stats.className = 'card-stats';
-  const li = post.like_count||0, re=post.replies_count||0, vi=post.views||0;
+  const li = post.like_count||0, re=post.replies_count||0;
   const hasReplies = re > 0 || post.has_replies;
   stats.innerHTML = `
     <span class="stat">❤️ ${li.toLocaleString()}</span>
     <span class="stat">💬 ${re.toLocaleString()}</span>
-    ${vi?`<span class="stat">👁️ ${vi.toLocaleString()}</span>`:''}`;
+    <span class="stat" id="vs_${post.id}" style="opacity:.45">👁️ -</span>`;
   card.appendChild(stats);
 
   // actions
