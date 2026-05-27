@@ -305,14 +305,37 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 .acc-tab.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:600;}
 .acc-tab.no-token{opacity:.5;border-style:dashed;}
 
-/* ── FAV BUTTON ── */
-.btn-fav-view{
-  background:none;border:1px solid var(--border2);color:var(--text2);
-  padding:6px 12px;border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:12px;
-  transition:all .2s;
+/* ── MAIN TABS ── */
+.main-tabs{display:flex;gap:5px;}
+.main-tab{
+  background:var(--bg4);border:1px solid var(--border2);color:var(--text2);
+  padding:4px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:inherit;
+  transition:all .15s;white-space:nowrap;
 }
-.btn-fav-view:hover,.btn-fav-view.active{border-color:#f5c518;color:#f5c518;}
-.btn-fav-view.active{background:rgba(245,197,24,.1);}
+.main-tab:hover{border-color:var(--accent);color:var(--accent);}
+.main-tab.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:600;}
+.main-tab.fav-tab.active{background:#f5c518;border-color:#f5c518;color:#000;}
+
+/* ── PUBLISH BAR ── */
+.pub-bar{
+  padding:9px 13px;border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+}
+.pub-select{
+  flex:1;min-width:100px;background:var(--bg4);border:1px solid var(--border2);
+  color:var(--text);font-family:inherit;font-size:11px;
+  padding:5px 8px;border-radius:var(--r2);outline:none;cursor:pointer;
+}
+.pub-select:focus{border-color:var(--accent);}
+.pub-select option{background:var(--bg4);}
+.btn-publish{
+  background:var(--accent);border:none;color:#000;
+  padding:5px 14px;border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;
+  transition:opacity .2s;white-space:nowrap;flex-shrink:0;
+}
+.btn-publish:hover{opacity:.85;}
+.btn-publish:disabled{opacity:.45;cursor:not-allowed;}
+.pub-status{font-size:11px;color:var(--text2);width:100%;}
 
 /* ── FAV STAR ON CARD ── */
 .card-fav-btn{
@@ -474,11 +497,11 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
   <div class="sec3">
     <div class="sec3-head">
       <div class="sec3-head-l">
-        <span class="sec3-title">Threads 게시물</span>
-        <div class="acc-tabs" id="accTabs"></div>
+        <span class="sec3-title">Threads</span>
+        <div class="main-tabs" id="mainTabs"></div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn-fav-view" id="btnFavView">⭐ 즐겨찾기</button>
+      <div id="feedControls" style="display:flex;gap:8px;align-items:center;">
+        <div class="acc-tabs" id="accTabs"></div>
         <button class="btn-refresh" id="btnRefresh">↻ 새로고침</button>
       </div>
     </div>
@@ -550,7 +573,7 @@ let tUser     = null;
 let nextCur   = null;
 let allPosts  = [];
 let curAccIdx = 0;
-let showFavs  = false;
+let mainTab   = 'feed'; // 'feed' | 'favs'
 
 // ═══════════════════════════════════════════════
 //  HELPERS
@@ -791,7 +814,33 @@ document.getElementById('btnMdSave').onclick = async () => {
   renderAccTabs();
   await loadFeed();
 };
-document.getElementById('btnRefresh').onclick = () => { showFavs=false; loadFeed(); };
+document.getElementById('btnRefresh').onclick = () => { mainTab='feed'; renderMainTabs(); loadFeed(); };
+
+// ── 메인 탭 ──────────────────────────────────────
+function renderMainTabs(){
+  const wrap = document.getElementById('mainTabs');
+  wrap.innerHTML = '';
+  const tabs = [{id:'feed', label:'피드'}, {id:'favs', label:'⭐ 즐겨찾기'}];
+  tabs.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'main-tab' + (t.id==='favs'?' fav-tab':'') + (mainTab===t.id?' active':'');
+    btn.textContent = t.label;
+    btn.onclick = () => {
+      mainTab = t.id;
+      renderMainTabs();
+      const fc = document.getElementById('feedControls');
+      if(t.id === 'feed'){
+        fc.style.display = 'flex';
+        loadFeed();
+      } else {
+        fc.style.display = 'none';
+        renderFavsTab();
+      }
+    };
+    wrap.appendChild(btn);
+  });
+  document.getElementById('feedControls').style.display = mainTab==='feed' ? 'flex' : 'none';
+}
 
 // ── 계정 탭 ──────────────────────────────────────
 function renderAccTabs(){
@@ -832,12 +881,134 @@ function toggleFav(post){
 }
 function isFav(id){ return getFavs().some(f=>f.id===id); }
 
-document.getElementById('btnFavView').onclick = () => {
-  showFavs = !showFavs;
-  document.getElementById('btnFavView').classList.toggle('active', showFavs);
-  if(showFavs) renderFavs();
-  else loadFeed();
-};
+// ── 즐겨찾기 탭 렌더 ──────────────────────────────
+function renderFavsTab(){
+  const fw = document.getElementById('feedWrap');
+  const favs = getFavs();
+  fw.innerHTML = '';
+  if(!favs.length){
+    fw.innerHTML = '<div class="feed-empty"><div class="ico">⭐</div><p>즐겨찾기한 게시물이 없습니다</p></div>';
+    return;
+  }
+  const grid = document.createElement('div');
+  grid.className = 'feed-grid';
+  fw.appendChild(grid);
+
+  favs.forEach(post => {
+    const card = makeCard(post, post._children||[]);
+
+    // 발행 바
+    const bar = document.createElement('div');
+    bar.className = 'pub-bar';
+
+    const sel = document.createElement('select');
+    sel.className = 'pub-select';
+    FEED_ACCOUNTS.filter(a=>a.token).forEach((acc, i) => {
+      const opt = document.createElement('option');
+      opt.value = FEED_ACCOUNTS.indexOf(acc);
+      opt.textContent = acc.name;
+      sel.appendChild(opt);
+    });
+
+    const btn = document.createElement('button');
+    btn.className = 'btn-publish';
+    btn.textContent = '📤 발행';
+
+    const status = document.createElement('span');
+    status.className = 'pub-status';
+
+    btn.onclick = () => publishPost(post, parseInt(sel.value), status, btn);
+
+    bar.appendChild(sel);
+    bar.appendChild(btn);
+    bar.appendChild(status);
+    card.appendChild(bar);
+    grid.appendChild(card);
+  });
+}
+
+// ── API POST ──────────────────────────────────────
+async function apiPost(url, params){
+  const qs = new URLSearchParams(params).toString();
+  const attempts = [
+    {u:`${url}?${qs}`, o:{method:'POST'}},
+    {u:PROXY+encodeURIComponent(`${url}?${qs}`), o:{method:'POST'}},
+  ];
+  let lastErr;
+  for(const {u,o} of attempts){
+    try{
+      const r = await fetch(u, o);
+      if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error?.message||`HTTP ${r.status}`); }
+      return r.json();
+    } catch(e){ lastErr=e; }
+  }
+  throw lastErr;
+}
+
+// ── 발행 ─────────────────────────────────────────
+async function publishPost(post, accIdx, statusEl, publishBtn){
+  const acc = FEED_ACCOUNTS[accIdx];
+  if(!acc?.token){ statusEl.textContent='토큰 없음'; return; }
+  publishBtn.disabled = true;
+  statusEl.style.color = 'var(--text2)';
+  try{
+    statusEl.textContent = '계정 확인 중...';
+    const me = await apiFetch(`${API}/me?fields=id&access_token=${acc.token}`);
+    const uid = me.id;
+    const text = post.text||'';
+    const mt = post.media_type;
+    let containerId;
+
+    if(mt==='IMAGE' && post.media_url){
+      statusEl.textContent = '이미지 컨테이너 생성 중...';
+      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'IMAGE', image_url:post.media_url, text, access_token:acc.token});
+      containerId = res.id;
+    } else if(mt==='VIDEO' && post.media_url){
+      statusEl.textContent = '영상 업로드 중...';
+      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'VIDEO', video_url:post.media_url, text, access_token:acc.token});
+      containerId = res.id;
+      for(let i=0; i<20; i++){
+        await new Promise(r=>setTimeout(r,3000));
+        const s = await apiFetch(`${API}/${containerId}?fields=status,error_message&access_token=${acc.token}`);
+        statusEl.textContent = `영상 인코딩 중... (${(i+1)*3}s)`;
+        if(s.status==='FINISHED') break;
+        if(s.status==='ERROR') throw new Error(s.error_message||'영상 처리 실패');
+      }
+    } else if(mt==='CAROUSEL_ALBUM' && post._children?.length){
+      const chs = post._children;
+      const childIds = [];
+      for(let i=0; i<chs.length; i++){
+        statusEl.textContent = `미디어 ${i+1}/${chs.length} 업로드 중...`;
+        const c = chs[i];
+        const isVid = c.media_type==='VIDEO';
+        const r = await apiPost(`${API}/${uid}/threads`, {
+          media_type: isVid?'VIDEO':'IMAGE',
+          [isVid?'video_url':'image_url']: c.media_url,
+          is_carousel_item:'true',
+          access_token:acc.token
+        });
+        childIds.push(r.id);
+      }
+      statusEl.textContent = '캐러셀 생성 중...';
+      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'CAROUSEL', children:childIds.join(','), text, access_token:acc.token});
+      containerId = res.id;
+    } else {
+      statusEl.textContent = '텍스트 게시물 생성 중...';
+      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'TEXT', text, access_token:acc.token});
+      containerId = res.id;
+    }
+
+    statusEl.textContent = '발행 중...';
+    await apiPost(`${API}/${uid}/threads_publish`, {creation_id:containerId, access_token:acc.token});
+    statusEl.textContent = '✓ 발행 완료!';
+    statusEl.style.color = 'var(--accent)';
+    publishBtn.textContent = '✓ 완료';
+  } catch(e){
+    statusEl.textContent = '오류: '+(e.message||String(e));
+    statusEl.style.color = 'var(--danger)';
+    publishBtn.disabled = false;
+  }
+}
 
 // ═══════════════════════════════════════════════
 //  THREADS API
@@ -1258,6 +1429,7 @@ async function dlMedia(url, filename){
   renderCal();
   renderCL();
   renderAccTabs();
+  renderMainTabs();
   loadFeed();
 })();
 </script>
