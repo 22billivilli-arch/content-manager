@@ -624,18 +624,18 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 
 <!-- SYNC MODAL -->
 <div class="modal-bg" id="syncModal">
-  <div class="modal" style="max-width:520px;">
-    <div class="modal-title">☁️ 클라우드 동기화 설정</div>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
-      Firebase Firestore로 모든 기기에서 <b style="color:var(--text)">스케줄·즐겨찾기·API키</b>를 자동 동기화합니다.<br>
-      <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent);">console.firebase.google.com</a> →
-      프로젝트 생성 → Firestore 데이터베이스 활성화 → 웹앱 추가 → Config 복사
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title">☁️ 클라우드 동기화</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.7;">
+      스케줄·즐겨찾기·API키가 모든 기기에서 자동으로 동기화됩니다.<br>
+      <span style="color:var(--accent);">✓ Firebase 연결됨</span>
+      <span style="color:var(--text3);font-size:11px;"> (manager-9c028)</span>
     </p>
-    <label>Firebase Config (JSON 붙여넣기)</label>
-    <textarea id="syncCfgTa" rows="5" placeholder='{"apiKey":"AIzaSy...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
-    <label style="display:block;margin-top:12px;font-size:11px;color:var(--text2);">워크스페이스 코드 <span style="color:var(--text3)">(모든 기기에서 동일하게 입력)</span></label>
-    <input type="text" id="syncWsId" placeholder="예: myapp-2024 (비밀번호처럼 사용됩니다)" style="margin-top:5px;">
-    <p class="modal-note">워크스페이스 코드가 같은 기기끼리 데이터가 공유됩니다. Firestore 보안 규칙은 기본 테스트 모드(30일)로 설정하세요.</p>
+    <label style="font-size:11px;color:var(--text2);">워크스페이스 코드
+      <span style="color:var(--text3)">(비밀번호처럼 사용 — 모든 기기 동일)</span>
+    </label>
+    <input type="text" id="syncWsId" placeholder="예: my-workspace-2024" style="margin-top:6px;">
+    <p class="modal-note">같은 코드를 입력한 기기끼리 데이터가 공유됩니다. 타인에게 알려주지 마세요.</p>
     <div class="modal-actions" style="justify-content:space-between;align-items:center;">
       <button class="btn-cancel" id="syncPullBtn" style="color:var(--accent);border-color:rgba(0,212,170,.35);">☁️ 지금 불러오기</button>
       <div style="display:flex;gap:8px;">
@@ -1821,16 +1821,21 @@ function renderVideoTab(){
 // ═══════════════════════════════════════════════
 //  CLOUD SYNC (Firebase Firestore)
 // ═══════════════════════════════════════════════
+const FB_CONFIG = {
+  apiKey: "AIzaSyDAL5Vw-OB9ug9lWrUZ1gl8rjbEmkUgcfE",
+  authDomain: "manager-9c028.firebaseapp.com",
+  projectId: "manager-9c028",
+  storageBucket: "manager-9c028.firebasestorage.app",
+  messagingSenderId: "150557438357",
+  appId: "1:150557438357:web:fdbae4da5c3d5208f0c69c"
+};
+
 let fbDb         = null;
 let syncDebounce = null;
 
 function initFirebase(){
   try{
-    const cfgStr = localStorage.getItem('fb_config');
-    if(!cfgStr) return false;
-    const cfg = JSON.parse(cfgStr);
-    if(!cfg.apiKey || !cfg.projectId) return false;
-    if(!firebase.apps.length) firebase.initializeApp(cfg);
+    if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
     fbDb = firebase.firestore();
     return true;
   } catch(e){ console.warn('Firebase init:', e); fbDb = null; return false; }
@@ -1885,11 +1890,7 @@ function setSyncBtn(icon, state){
 }
 
 function openSyncModal(){
-  const cfg = localStorage.getItem('fb_config') || '';
-  const wid = localStorage.getItem('fb_workspace') || '';
-  try{ document.getElementById('syncCfgTa').value = cfg ? JSON.stringify(JSON.parse(cfg), null, 2) : ''; }
-  catch{ document.getElementById('syncCfgTa').value = cfg; }
-  document.getElementById('syncWsId').value = wid;
+  document.getElementById('syncWsId').value = localStorage.getItem('fb_workspace') || '';
   document.getElementById('syncModal').classList.add('open');
 }
 
@@ -1900,22 +1901,13 @@ document.getElementById('syncModal').addEventListener('click', e => {
 });
 
 document.getElementById('syncSaveBtn').onclick = async () => {
-  const cfgStr = document.getElementById('syncCfgTa').value.trim();
-  const wid    = document.getElementById('syncWsId').value.trim();
-  if(!cfgStr || !wid){ toast('Firebase Config와 워크스페이스 코드를 모두 입력하세요'); return; }
-  try{ JSON.parse(cfgStr); } catch{ toast('Config JSON 형식이 올바르지 않습니다'); return; }
-  localStorage.setItem('fb_config', cfgStr);
+  const wid = document.getElementById('syncWsId').value.trim();
+  if(!wid){ toast('워크스페이스 코드를 입력하세요'); return; }
   localStorage.setItem('fb_workspace', wid);
-  fbDb = null;
-  try{ if(firebase.apps.length) await firebase.app().delete(); } catch(e){}
-  if(initFirebase()){
-    document.getElementById('syncModal').classList.remove('open');
-    const ok = await cloudLoad();
-    if(ok){ renderCal(); renderCL(); toast('☁️ 동기화 연결됨!', true); }
-    else toast('연결 실패. Config를 다시 확인하세요.');
-  } else {
-    toast('Firebase Config 오류. 형식을 확인하세요.');
-  }
+  document.getElementById('syncModal').classList.remove('open');
+  const ok = await cloudLoad();
+  if(ok){ renderCal(); renderCL(); toast('☁️ 동기화 연결됨!', true); }
+  else toast('연결 실패. 잠시 후 다시 시도하세요.');
 };
 
 document.getElementById('syncPullBtn').onclick = async () => {
