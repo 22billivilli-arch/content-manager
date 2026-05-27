@@ -6,6 +6,8 @@
 <title>콘텐츠 매니저</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root {
   --bg:     #0f0f0f;
@@ -64,6 +66,21 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
   transition:all .2s;
 }
 .btn-token:hover{background:var(--accent);color:#000;}
+.btn-sync{
+  background:var(--bg3);color:var(--text3);
+  border:1px solid var(--border2);padding:7px 11px;
+  border-radius:var(--r2);cursor:pointer;font-size:15px;line-height:1;
+  transition:all .2s;
+}
+.btn-sync:hover{border-color:var(--accent);}
+.btn-sync.ok{color:var(--accent);border-color:rgba(0,212,170,.4);}
+.btn-sync.err{color:var(--danger);border-color:rgba(255,85,85,.4);}
+.modal input[type=text]{
+  width:100%;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:var(--r2);color:var(--text);font-family:inherit;font-size:13px;
+  padding:9px 11px;outline:none;transition:border-color .2s;
+}
+.modal input[type=text]:focus{border-color:var(--accent);}
 
 /* ── LAYOUT ── */
 .wrap{padding:20px 24px;max-width:1440px;margin:0 auto;}
@@ -529,7 +546,10 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
       <div class="header-title">📋 콘텐츠 매니저</div>
       <div class="header-date" id="hDate"></div>
     </div>
-    <button class="btn-token" id="btnToken">🔑 토큰 설정</button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn-sync" id="btnSync" title="클라우드 동기화 설정">☁️</button>
+      <button class="btn-token" id="btnToken">🔑 토큰 설정</button>
+    </div>
   </div>
   <nav class="top-nav" id="topNav"></nav>
 </header>
@@ -598,6 +618,30 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
     <div class="modal-actions">
       <button class="btn-cancel" id="btnMdClose">취소</button>
       <button class="btn-save" id="btnMdSave">저장 및 로드</button>
+    </div>
+  </div>
+</div>
+
+<!-- SYNC MODAL -->
+<div class="modal-bg" id="syncModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">☁️ 클라우드 동기화 설정</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7;">
+      Firebase Firestore로 모든 기기에서 <b style="color:var(--text)">스케줄·즐겨찾기·API키</b>를 자동 동기화합니다.<br>
+      <a href="https://console.firebase.google.com" target="_blank" style="color:var(--accent);">console.firebase.google.com</a> →
+      프로젝트 생성 → Firestore 데이터베이스 활성화 → 웹앱 추가 → Config 복사
+    </p>
+    <label>Firebase Config (JSON 붙여넣기)</label>
+    <textarea id="syncCfgTa" rows="5" placeholder='{"apiKey":"AIzaSy...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
+    <label style="display:block;margin-top:12px;font-size:11px;color:var(--text2);">워크스페이스 코드 <span style="color:var(--text3)">(모든 기기에서 동일하게 입력)</span></label>
+    <input type="text" id="syncWsId" placeholder="예: myapp-2024 (비밀번호처럼 사용됩니다)" style="margin-top:5px;">
+    <p class="modal-note">워크스페이스 코드가 같은 기기끼리 데이터가 공유됩니다. Firestore 보안 규칙은 기본 테스트 모드(30일)로 설정하세요.</p>
+    <div class="modal-actions" style="justify-content:space-between;align-items:center;">
+      <button class="btn-cancel" id="syncPullBtn" style="color:var(--accent);border-color:rgba(0,212,170,.35);">☁️ 지금 불러오기</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-cancel" id="syncClose">닫기</button>
+        <button class="btn-save" id="syncSaveBtn">저장 및 연결</button>
+      </div>
     </div>
   </div>
 </div>
@@ -673,7 +717,7 @@ function toast(msg, ok=false){
 }
 function clKey(ds){ return 'cl_'+ds; }
 function loadCl(ds){ const r=localStorage.getItem(clKey(ds)); return r?JSON.parse(r):{}; }
-function saveCl(ds,d){ localStorage.setItem(clKey(ds),JSON.stringify(d)); }
+function saveCl(ds,d){ localStorage.setItem(clKey(ds),JSON.stringify(d)); cloudSave(); }
 function hasCl(ds){ const d=loadCl(ds); return Object.keys(d).some(k=>d[k].checked||d[k].memo); }
 function isRO(ds){ return ds < today(); }
 
@@ -882,6 +926,7 @@ document.getElementById('btnMdSave').onclick = async () => {
   } else {
     localStorage.setItem('threads_token', t);
   }
+  cloudSave();
   closeModal();
   toast('토큰 저장됨. 피드 로드 중...', true);
   renderAccTabs();
@@ -959,7 +1004,7 @@ function renderAccTabs(){
 
 // ── 즐겨찾기 ─────────────────────────────────────
 function getFavs(){ return JSON.parse(localStorage.getItem('fav_posts')||'[]'); }
-function saveFavs(arr){ localStorage.setItem('fav_posts', JSON.stringify(arr)); }
+function saveFavs(arr){ localStorage.setItem('fav_posts', JSON.stringify(arr)); cloudSave(); }
 
 function toggleFav(post){
   let favs = getFavs();
@@ -1573,6 +1618,7 @@ function renderCpTab(){
     localStorage.setItem('coupang_secret', s);
     if(id) localStorage.setItem('coupang_subid', id);
     else   localStorage.removeItem('coupang_subid');
+    cloudSave();
     const badge = fw.querySelector('.cp-badge');
     badge.textContent = '키 저장됨';
     badge.className = 'cp-badge ok';
@@ -1772,7 +1818,119 @@ function renderVideoTab(){
   };
 }
 
-(function init(){
+// ═══════════════════════════════════════════════
+//  CLOUD SYNC (Firebase Firestore)
+// ═══════════════════════════════════════════════
+let fbDb         = null;
+let syncDebounce = null;
+
+function initFirebase(){
+  try{
+    const cfgStr = localStorage.getItem('fb_config');
+    if(!cfgStr) return false;
+    const cfg = JSON.parse(cfgStr);
+    if(!cfg.apiKey || !cfg.projectId) return false;
+    if(!firebase.apps.length) firebase.initializeApp(cfg);
+    fbDb = firebase.firestore();
+    return true;
+  } catch(e){ console.warn('Firebase init:', e); fbDb = null; return false; }
+}
+
+async function cloudLoad(){
+  if(!fbDb) return false;
+  const wid = localStorage.getItem('fb_workspace');
+  if(!wid) return false;
+  try{
+    setSyncBtn('⏳', 'loading');
+    const snap = await fbDb.collection('ws').doc(wid).get();
+    if(snap.exists){
+      Object.entries(snap.data()).forEach(([k,v]) => {
+        if(v !== null && v !== undefined) localStorage.setItem(k, String(v));
+      });
+    }
+    setSyncBtn('☁️', 'ok');
+    return true;
+  } catch(e){ setSyncBtn('⚠️', 'err'); console.warn('cloudLoad:', e); return false; }
+}
+
+function cloudSave(){
+  if(!fbDb) return;
+  const wid = localStorage.getItem('fb_workspace');
+  if(!wid) return;
+  clearTimeout(syncDebounce);
+  setSyncBtn('⏳', 'loading');
+  syncDebounce = setTimeout(async () => {
+    try{
+      const data = {};
+      const fixed = ['fav_posts','f_name','threads_token','token_hunya',
+                     'coupang_access','coupang_secret','coupang_subid'];
+      fixed.forEach(k => { const v = localStorage.getItem(k); if(v !== null) data[k] = v; });
+      for(let i = 0; i < localStorage.length; i++){
+        const k = localStorage.key(i);
+        if(k && k.startsWith('cl_')) data[k] = localStorage.getItem(k);
+      }
+      await fbDb.collection('ws').doc(wid).set(data);
+      setSyncBtn('☁️', 'ok');
+    } catch(e){ setSyncBtn('⚠️', 'err'); console.warn('cloudSave:', e); }
+  }, 1500);
+}
+
+function setSyncBtn(icon, state){
+  const btn = document.getElementById('btnSync');
+  if(!btn) return;
+  btn.textContent = icon;
+  btn.className = 'btn-sync' + (state==='ok' ? ' ok' : state==='err' ? ' err' : '');
+  const t = {ok:'동기화됨', err:'동기화 오류', loading:'동기화 중...'};
+  btn.title = t[state] || '클라우드 동기화 설정';
+}
+
+function openSyncModal(){
+  const cfg = localStorage.getItem('fb_config') || '';
+  const wid = localStorage.getItem('fb_workspace') || '';
+  try{ document.getElementById('syncCfgTa').value = cfg ? JSON.stringify(JSON.parse(cfg), null, 2) : ''; }
+  catch{ document.getElementById('syncCfgTa').value = cfg; }
+  document.getElementById('syncWsId').value = wid;
+  document.getElementById('syncModal').classList.add('open');
+}
+
+document.getElementById('btnSync').onclick = openSyncModal;
+document.getElementById('syncClose').onclick = () => document.getElementById('syncModal').classList.remove('open');
+document.getElementById('syncModal').addEventListener('click', e => {
+  if(e.target.id === 'syncModal') document.getElementById('syncModal').classList.remove('open');
+});
+
+document.getElementById('syncSaveBtn').onclick = async () => {
+  const cfgStr = document.getElementById('syncCfgTa').value.trim();
+  const wid    = document.getElementById('syncWsId').value.trim();
+  if(!cfgStr || !wid){ toast('Firebase Config와 워크스페이스 코드를 모두 입력하세요'); return; }
+  try{ JSON.parse(cfgStr); } catch{ toast('Config JSON 형식이 올바르지 않습니다'); return; }
+  localStorage.setItem('fb_config', cfgStr);
+  localStorage.setItem('fb_workspace', wid);
+  fbDb = null;
+  try{ if(firebase.apps.length) await firebase.app().delete(); } catch(e){}
+  if(initFirebase()){
+    document.getElementById('syncModal').classList.remove('open');
+    const ok = await cloudLoad();
+    if(ok){ renderCal(); renderCL(); toast('☁️ 동기화 연결됨!', true); }
+    else toast('연결 실패. Config를 다시 확인하세요.');
+  } else {
+    toast('Firebase Config 오류. 형식을 확인하세요.');
+  }
+};
+
+document.getElementById('syncPullBtn').onclick = async () => {
+  if(!fbDb){ toast('먼저 저장 및 연결을 클릭하세요'); return; }
+  const ok = await cloudLoad();
+  if(ok){
+    document.getElementById('syncModal').classList.remove('open');
+    renderCal(); renderCL();
+    toast('☁️ 데이터 불러오기 완료', true);
+  } else {
+    toast('불러오기 실패. 네트워크를 확인하세요.');
+  }
+};
+
+(async function init(){
   // 토큰 미설정 시 자동 주입
   const DEFAULT_TOKEN = 'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD';
   if(!localStorage.getItem('threads_token')){
@@ -1780,6 +1938,11 @@ function renderVideoTab(){
   }
   renderHeader();
   initCal();
+  // Firebase 동기화 먼저 (데이터 로드 후 렌더)
+  if(initFirebase()){
+    setSyncBtn('⏳', 'loading');
+    await cloudLoad();
+  }
   renderCal();
   renderCL();
   renderAccTabs();
