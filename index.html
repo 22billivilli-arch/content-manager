@@ -1756,6 +1756,67 @@ async function fetchHtmlViaProxy(url){
   throw new Error('프록시 모두 실패: ' + errors.join(' / '));
 }
 
+function extractShortcode(url){
+  const m = url.match(/\/post\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
+function shortcodeToMediaId(sc){
+  const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  let n = BigInt(0);
+  for(const c of sc){
+    const i = A.indexOf(c);
+    if(i < 0) return null;
+    n = n * 64n + BigInt(i);
+  }
+  return n.toString();
+}
+
+async function fetchVideoUrl(inputUrl){
+  // 1. Threads Graph API (저장된 토큰으로 media_url 직접 조회)
+  const sc = extractShortcode(inputUrl);
+  if(sc){
+    const token = localStorage.getItem('threads_token');
+    if(token){
+      try{
+        const mid = shortcodeToMediaId(sc);
+        if(mid){
+          const r = await fetch(
+            `https://graph.threads.net/v1.0/${mid}?fields=id,media_type,media_url&access_token=${token}`,
+            {signal: AbortSignal.timeout(8000)}
+          );
+          if(r.ok){
+            const d = await r.json();
+            if(d.media_url) return d.media_url;
+          }
+        }
+      } catch(e){}
+    }
+  }
+
+  // 2. microlink.io — 헤드리스 브라우저로 메타데이터 추출
+  try{
+    const r = await fetch(
+      `https://api.microlink.io/?url=${encodeURIComponent(inputUrl)}&video=true`,
+      {signal: AbortSignal.timeout(20000)}
+    );
+    if(r.ok){
+      const d = await r.json();
+      const vurl = d.data?.video?.url || d.data?.video?.src;
+      if(vurl) return vurl;
+    }
+  } catch(e){}
+
+  // 3. 프록시 HTML 스크래핑 (최후 수단)
+  try{
+    const html = await fetchHtmlViaProxy(inputUrl);
+    const u = extractVideoUrl(html);
+    if(u) return u;
+  } catch(e){}
+
+  throw new Error('영상 URL을 찾을 수 없습니다. 영상이 포함된 게시물인지 확인해주세요.');
+}
+
 function renderVideoTab(){
   const fw = document.getElementById('feedWrap');
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -1798,9 +1859,7 @@ function renderVideoTab(){
     q('_vdResult').style.display = 'none';
     q('_vdErr').style.display = 'none';
     try{
-      const html = await fetchHtmlViaProxy(inputUrl);
-      rawVideoUrl = extractVideoUrl(html);
-      if(!rawVideoUrl) throw new Error('영상 URL을 찾을 수 없습니다. 영상이 포함된 게시물인지 확인해주세요.');
+      rawVideoUrl = await fetchVideoUrl(inputUrl);
       // preview via proxy (avoids CORS on CDN)
       const preview = q('_vdPreview');
       preview.src = PROXY + encodeURIComponent(rawVideoUrl);
