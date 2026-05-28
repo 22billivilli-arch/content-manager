@@ -1976,16 +1976,20 @@ document.getElementById('syncPullBtn').onclick = async () => {
     localStorage.setItem('threads_token', DEFAULT_TOKEN);
   }
   renderHeader();
-  renderTopNav();   // 탭 즉시 렌더 (비동기 작업 전)
+  renderTopNav();   // 탭 즉시 렌더
   initCal();
-  // Firebase 동기화
-  if(initFirebase()){
-    setSyncBtn('⏳', 'loading');
-    try { await cloudLoad(); } catch(e){ setSyncBtn('☁️','err'); }
-  }
-  renderCal();
+  renderCal();      // 로컬 데이터로 즉시 렌더 (Firebase 대기 없이)
   renderCL();
   renderAccTabs();
+  // Firebase 동기화 (완료 후 재렌더)
+  if(initFirebase()){
+    setSyncBtn('⏳', 'loading');
+    try {
+      await cloudLoad();
+      renderCal();  // 클라우드 데이터 반영
+      renderCL();
+    } catch(e){ setSyncBtn('☁️','err'); }
+  }
 })();
 </script>
 </body>
