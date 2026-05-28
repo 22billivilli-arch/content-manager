@@ -1929,16 +1929,16 @@ document.getElementById('syncPullBtn').onclick = async () => {
     localStorage.setItem('threads_token', DEFAULT_TOKEN);
   }
   renderHeader();
+  renderTopNav();   // 탭 즉시 렌더 (비동기 작업 전)
   initCal();
-  // Firebase 동기화 먼저 (데이터 로드 후 렌더)
+  // Firebase 동기화
   if(initFirebase()){
     setSyncBtn('⏳', 'loading');
-    await cloudLoad();
+    try { await cloudLoad(); } catch(e){ setSyncBtn('☁️','err'); }
   }
   renderCal();
   renderCL();
   renderAccTabs();
-  renderTopNav();
 })();
 </script>
 </body>
