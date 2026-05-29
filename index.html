@@ -1773,7 +1773,7 @@ function shortcodeToMediaId(sc){
 }
 
 async function fetchMediaItems(inputUrl){
-  // 1. Threads Graph API — 영상+사진 모두 (carousel children 포함)
+  // 1. Threads Graph API — children은 별도 엔드포인트로 조회
   const sc = extractShortcode(inputUrl);
   if(sc){
     const token = localStorage.getItem('threads_token');
@@ -1782,27 +1782,34 @@ async function fetchMediaItems(inputUrl){
         const mid = shortcodeToMediaId(sc);
         if(mid){
           const r = await fetch(
-            `https://graph.threads.net/v1.0/${mid}?fields=id,media_type,media_url,thumbnail_url,children{media_type,media_url,thumbnail_url}&access_token=${token}`,
+            `https://graph.threads.net/v1.0/${mid}?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`,
             {signal: AbortSignal.timeout(8000)}
           );
           if(r.ok){
             const d = await r.json();
-            const items = [];
-            if(d.media_type === 'CAROUSEL_ALBUM' && d.children?.data?.length){
-              for(const c of d.children.data){
-                if(c.media_url) items.push({type: c.media_type||'IMAGE', url: c.media_url});
+            if(d.media_type === 'CAROUSEL_ALBUM'){
+              // inline children expansion 미지원 → 별도 /children 호출
+              const cr = await fetch(
+                `https://graph.threads.net/v1.0/${mid}/children?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`,
+                {signal: AbortSignal.timeout(8000)}
+              );
+              if(cr.ok){
+                const cd = await cr.json();
+                const items = (cd.data||[])
+                  .filter(c => c.media_url)
+                  .map(c => ({type: c.media_type||'IMAGE', url: c.media_url}));
+                if(items.length) return items;
               }
             } else if(d.media_url){
-              items.push({type: d.media_type||'VIDEO', url: d.media_url});
+              return [{type: d.media_type||'VIDEO', url: d.media_url}];
             }
-            if(items.length) return items;
           }
         }
       } catch(e){}
     }
   }
 
-  // 2. microlink.io — 헤드리스 브라우저로 추출
+  // 2. microlink.io — 영상만 반환 (thumbnail을 사진으로 오인 방지)
   try{
     const r = await fetch(
       `https://api.microlink.io/?url=${encodeURIComponent(inputUrl)}&video=true`,
@@ -1810,16 +1817,12 @@ async function fetchMediaItems(inputUrl){
     );
     if(r.ok){
       const d = await r.json();
-      const items = [];
       const vurl = d.data?.video?.url || d.data?.video?.src;
-      if(vurl) items.push({type:'VIDEO', url:vurl});
-      const iurl = d.data?.image?.url;
-      if(iurl && iurl !== vurl) items.push({type:'IMAGE', url:iurl});
-      if(items.length) return items;
+      if(vurl) return [{type:'VIDEO', url:vurl}];
     }
   } catch(e){}
 
-  // 3. 프록시 HTML 스크래핑 (최후 수단)
+  // 3. 프록시 HTML 스크래핑
   try{
     const html = await fetchHtmlViaProxy(inputUrl);
     const vurl = extractVideoUrl(html);
@@ -1827,6 +1830,23 @@ async function fetchMediaItems(inputUrl){
   } catch(e){}
 
   throw new Error('미디어를 찾을 수 없습니다. 게시물 URL을 확인해주세요.');
+}
+
+// 멀티 프록시 blob 다운로드 (403 대응)
+async function fetchBlob(url){
+  try{
+    const r = await fetch(url, {signal: AbortSignal.timeout(30000)});
+    if(r.ok){ const b = await r.blob(); if(b.size > 1000) return b; }
+  } catch(e){}
+  try{
+    const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(30000)});
+    if(r.ok){ const b = await r.blob(); if(b.size > 1000) return b; }
+  } catch(e){}
+  try{
+    const r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(30000)});
+    if(r.ok){ const b = await r.blob(); if(b.size > 1000) return b; }
+  } catch(e){}
+  throw new Error('CDN이 다운로드를 차단합니다. 새 탭에서 길게 눌러 저장하세요.');
 }
 
 function renderVideoTab(){
@@ -1852,41 +1872,51 @@ function renderVideoTab(){
 
   const q = id => fw.querySelector('#' + id);
 
-  async function dlItem(url, filename, btn, label){
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spin"></span> 다운로드 중...';
+  async function dlItem(url, fname, btn){
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 다운로드 중...';
     try{
-      const r = await fetch(PROXY + encodeURIComponent(url));
-      if(!r.ok) throw new Error(`HTTP ${r.status}`);
-      const blob = await r.blob();
-      if(isIOS && navigator.canShare){
-        const file = new File([blob], filename, {type: blob.type});
-        if(navigator.canShare({files:[file]})){
-          await navigator.share({files:[file], title:filename});
-          toast('공유 완료 ✓', true);
-          return;
-        }
-      }
+      const blob = await fetchBlob(url);
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = blobUrl; a.download = filename;
+      a.href = blobUrl; a.download = fname;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
       toast('다운로드 시작 ✓', true);
     } catch(e){
-      toast('다운로드 실패: ' + e.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = label;
-    }
+      toast(e.message);
+      window.open(url, '_blank');
+    } finally { btn.disabled = false; btn.innerHTML = orig; }
+  }
+
+  async function shareItem(url, fname, btn){
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 준비 중...';
+    try{
+      const blob = await fetchBlob(url);
+      const file = new File([blob], fname, {type: blob.type});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title: fname});
+        toast('앨범 저장 완료 ✓', true);
+      } else if(navigator.share){
+        await navigator.share({url, title: fname});
+      } else {
+        window.open(url, '_blank');
+        toast('새 탭에서 열림 — 길게 눌러 저장하세요');
+      }
+    } catch(e){
+      if(!e.name?.includes('AbortError')){
+        toast('공유 실패: ' + e.message);
+        window.open(url, '_blank');
+      }
+    } finally { btn.disabled = false; btn.innerHTML = orig; }
   }
 
   q('_vdFetchBtn').onclick = async () => {
     const inputUrl = q('_vdUrl').value.trim();
     if(!inputUrl){ toast('Threads URL을 입력해주세요'); return; }
     const btn = q('_vdFetchBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spin"></span> 분석 중...';
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 분석 중...';
     q('_vdItems').style.display = 'none';
     q('_vdItems').innerHTML = '';
     q('_vdErr').style.display = 'none';
@@ -1898,8 +1928,8 @@ function renderVideoTab(){
       items.forEach((item, idx) => {
         const isVid = item.type === 'VIDEO';
         const ext   = isVid ? 'mp4' : 'jpg';
-        const dlLabel = `📥 ${isVid ? '영상' : '사진'} 다운로드`;
-        const num = items.length > 1 ? ` ${idx+1}` : '';
+        const fname = `threads_${Date.now()}_${idx+1}.${ext}`;
+        const num   = items.length > 1 ? ` ${idx+1}` : '';
 
         const wrap = document.createElement('div');
         wrap.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;';
@@ -1910,11 +1940,15 @@ function renderVideoTab(){
         wrap.appendChild(lbl);
 
         if(isVid){
-          // 직접 URL로 재생 (프록시 거치면 range request 깨짐)
           const v = document.createElement('video');
-          v.src = item.url;
           v.controls = true; v.playsInline = true;
           v.style.cssText = 'width:100%;max-height:360px;background:#000;display:block;';
+          v.src = item.url;
+          // 직접 URL 실패 시 corsproxy fallback
+          v.onerror = () => {
+            if(!v.src.startsWith('https://corsproxy.io'))
+              v.src = `https://corsproxy.io/?${encodeURIComponent(item.url)}`;
+          };
           wrap.appendChild(v);
         } else {
           const img = document.createElement('img');
@@ -1924,13 +1958,24 @@ function renderVideoTab(){
           wrap.appendChild(img);
         }
 
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;gap:8px;padding:10px;';
+
         const dlBtn = document.createElement('button');
         dlBtn.className = 'cp-btn';
-        dlBtn.style.cssText = 'margin:10px;width:calc(100% - 20px);';
-        dlBtn.innerHTML = dlLabel;
-        dlBtn.onclick = () => dlItem(item.url, `threads_${Date.now()}_${idx+1}.${ext}`, dlBtn, dlLabel);
-        wrap.appendChild(dlBtn);
+        dlBtn.style.cssText = 'flex:1;margin:0;font-size:13px;';
+        dlBtn.innerHTML = `📥 ${isVid?'영상':'사진'} 저장`;
+        dlBtn.onclick = () => dlItem(item.url, fname, dlBtn);
 
+        const shBtn = document.createElement('button');
+        shBtn.className = 'cp-btn';
+        shBtn.style.cssText = 'flex:1;margin:0;font-size:13px;background:var(--bg4);color:var(--text);border:1px solid var(--border2);';
+        shBtn.innerHTML = '📤 공유 / 앨범저장';
+        shBtn.onclick = () => shareItem(item.url, fname, shBtn);
+
+        btnRow.appendChild(dlBtn);
+        btnRow.appendChild(shBtn);
+        wrap.appendChild(btnRow);
         container.appendChild(wrap);
       });
 
@@ -1940,8 +1985,7 @@ function renderVideoTab(){
       q('_vdErr').style.display = 'block';
       q('_vdErr').textContent = '오류: ' + e.message;
     } finally {
-      btn.disabled = false;
-      btn.innerHTML = '미디어 가져오기';
+      btn.disabled = false; btn.innerHTML = '미디어 가져오기';
     }
   };
 }
