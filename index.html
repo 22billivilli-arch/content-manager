@@ -1772,8 +1772,8 @@ function shortcodeToMediaId(sc){
   return n.toString();
 }
 
-async function fetchVideoUrl(inputUrl){
-  // 1. Threads Graph API (저장된 토큰으로 media_url 직접 조회)
+async function fetchMediaItems(inputUrl){
+  // 1. Threads Graph API — 영상+사진 모두 (carousel children 포함)
   const sc = extractShortcode(inputUrl);
   if(sc){
     const token = localStorage.getItem('threads_token');
@@ -1782,19 +1782,27 @@ async function fetchVideoUrl(inputUrl){
         const mid = shortcodeToMediaId(sc);
         if(mid){
           const r = await fetch(
-            `https://graph.threads.net/v1.0/${mid}?fields=id,media_type,media_url&access_token=${token}`,
+            `https://graph.threads.net/v1.0/${mid}?fields=id,media_type,media_url,thumbnail_url,children{media_type,media_url,thumbnail_url}&access_token=${token}`,
             {signal: AbortSignal.timeout(8000)}
           );
           if(r.ok){
             const d = await r.json();
-            if(d.media_url) return d.media_url;
+            const items = [];
+            if(d.media_type === 'CAROUSEL_ALBUM' && d.children?.data?.length){
+              for(const c of d.children.data){
+                if(c.media_url) items.push({type: c.media_type||'IMAGE', url: c.media_url});
+              }
+            } else if(d.media_url){
+              items.push({type: d.media_type||'VIDEO', url: d.media_url});
+            }
+            if(items.length) return items;
           }
         }
       } catch(e){}
     }
   }
 
-  // 2. microlink.io — 헤드리스 브라우저로 메타데이터 추출
+  // 2. microlink.io — 헤드리스 브라우저로 추출
   try{
     const r = await fetch(
       `https://api.microlink.io/?url=${encodeURIComponent(inputUrl)}&video=true`,
@@ -1802,19 +1810,23 @@ async function fetchVideoUrl(inputUrl){
     );
     if(r.ok){
       const d = await r.json();
+      const items = [];
       const vurl = d.data?.video?.url || d.data?.video?.src;
-      if(vurl) return vurl;
+      if(vurl) items.push({type:'VIDEO', url:vurl});
+      const iurl = d.data?.image?.url;
+      if(iurl && iurl !== vurl) items.push({type:'IMAGE', url:iurl});
+      if(items.length) return items;
     }
   } catch(e){}
 
   // 3. 프록시 HTML 스크래핑 (최후 수단)
   try{
     const html = await fetchHtmlViaProxy(inputUrl);
-    const u = extractVideoUrl(html);
-    if(u) return u;
+    const vurl = extractVideoUrl(html);
+    if(vurl) return [{type:'VIDEO', url:vurl}];
   } catch(e){}
 
-  throw new Error('영상 URL을 찾을 수 없습니다. 영상이 포함된 게시물인지 확인해주세요.');
+  throw new Error('미디어를 찾을 수 없습니다. 게시물 URL을 확인해주세요.');
 }
 
 function renderVideoTab(){
@@ -1824,31 +1836,50 @@ function renderVideoTab(){
   fw.innerHTML = `
     <div class="cp-tab-wrap">
       <div class="cp-head-row">
-        <span class="cp-head-title">📥 Threads 영상 다운로드</span>
+        <span class="cp-head-title">📥 Threads 미디어 다운로드</span>
       </div>
       <div>
         <div class="cp-label">Threads 게시물 URL</div>
         <input class="cp-input" id="_vdUrl" type="url"
           placeholder="https://www.threads.net/@username/post/..."
           style="width:100%;font-size:13px;">
-        <button class="cp-btn" id="_vdFetchBtn" style="margin-top:10px;">영상 가져오기</button>
+        <button class="cp-btn" id="_vdFetchBtn" style="margin-top:10px;">미디어 가져오기</button>
       </div>
-      <div id="_vdResult" style="display:none;margin-top:16px;">
-        <video class="vd-preview" id="_vdPreview" controls playsinline></video>
-        <div class="vd-dl-row">
-          <button class="cp-btn" id="_vdDownBtn">📥 다운로드</button>
-          <button class="cp-btn" id="_vdShareBtn" style="background:var(--bg4);color:var(--text);border:1px solid var(--border2);">📤 공유 / 저장</button>
-        </div>
-        <p style="font-size:11px;color:var(--text2);margin-top:8px;text-align:center;">
-          ${isIOS ? 'iOS: 공유/저장 버튼 또는 영상을 길게 눌러 저장하세요' : 'Android: 다운로드 버튼으로 갤러리에 저장'}
-        </p>
-      </div>
+      <div id="_vdItems" style="display:none;margin-top:16px;"></div>
       <div id="_vdErr" style="display:none;margin-top:12px;" class="cp-result err"></div>
     </div>
   `;
 
-  let rawVideoUrl = '';
   const q = id => fw.querySelector('#' + id);
+
+  async function dlItem(url, filename, btn, label){
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> 다운로드 중...';
+    try{
+      const r = await fetch(PROXY + encodeURIComponent(url));
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = await r.blob();
+      if(isIOS && navigator.canShare){
+        const file = new File([blob], filename, {type: blob.type});
+        if(navigator.canShare({files:[file]})){
+          await navigator.share({files:[file], title:filename});
+          toast('공유 완료 ✓', true);
+          return;
+        }
+      }
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+      toast('다운로드 시작 ✓', true);
+    } catch(e){
+      toast('다운로드 실패: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = label;
+    }
+  }
 
   q('_vdFetchBtn').onclick = async () => {
     const inputUrl = q('_vdUrl').value.trim();
@@ -1856,70 +1887,61 @@ function renderVideoTab(){
     const btn = q('_vdFetchBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spin"></span> 분석 중...';
-    q('_vdResult').style.display = 'none';
+    q('_vdItems').style.display = 'none';
+    q('_vdItems').innerHTML = '';
     q('_vdErr').style.display = 'none';
     try{
-      rawVideoUrl = await fetchVideoUrl(inputUrl);
-      // preview via proxy (avoids CORS on CDN)
-      const preview = q('_vdPreview');
-      preview.src = PROXY + encodeURIComponent(rawVideoUrl);
-      q('_vdResult').style.display = 'block';
+      const items = await fetchMediaItems(inputUrl);
+      const container = q('_vdItems');
+      container.innerHTML = '';
+
+      items.forEach((item, idx) => {
+        const isVid = item.type === 'VIDEO';
+        const ext   = isVid ? 'mp4' : 'jpg';
+        const dlLabel = `📥 ${isVid ? '영상' : '사진'} 다운로드`;
+        const num = items.length > 1 ? ` ${idx+1}` : '';
+
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;';
+
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'padding:7px 12px;background:var(--bg3);font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);';
+        lbl.textContent = (isVid ? '🎬 영상' : '🖼️ 사진') + num;
+        wrap.appendChild(lbl);
+
+        if(isVid){
+          // 직접 URL로 재생 (프록시 거치면 range request 깨짐)
+          const v = document.createElement('video');
+          v.src = item.url;
+          v.controls = true; v.playsInline = true;
+          v.style.cssText = 'width:100%;max-height:360px;background:#000;display:block;';
+          wrap.appendChild(v);
+        } else {
+          const img = document.createElement('img');
+          img.src = item.url;
+          img.style.cssText = 'width:100%;max-height:360px;object-fit:contain;display:block;background:#000;';
+          img.alt = '이미지';
+          wrap.appendChild(img);
+        }
+
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'cp-btn';
+        dlBtn.style.cssText = 'margin:10px;width:calc(100% - 20px);';
+        dlBtn.innerHTML = dlLabel;
+        dlBtn.onclick = () => dlItem(item.url, `threads_${Date.now()}_${idx+1}.${ext}`, dlBtn, dlLabel);
+        wrap.appendChild(dlBtn);
+
+        container.appendChild(wrap);
+      });
+
+      container.style.display = 'block';
+      toast(`미디어 ${items.length}개 발견`, true);
     } catch(e){
       q('_vdErr').style.display = 'block';
       q('_vdErr').textContent = '오류: ' + e.message;
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '영상 가져오기';
-    }
-  };
-
-  q('_vdDownBtn').onclick = async () => {
-    if(!rawVideoUrl) return;
-    const btn = q('_vdDownBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spin"></span> 준비 중...';
-    try{
-      const r = await fetch(PROXY + encodeURIComponent(rawVideoUrl));
-      if(!r.ok) throw new Error(`HTTP ${r.status}`);
-      const blob = await r.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = 'threads_' + Date.now() + '.mp4';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-      toast('다운로드 시작 ✓', true);
-    } catch(e){
-      toast('다운로드 실패: ' + e.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '📥 다운로드';
-    }
-  };
-
-  q('_vdShareBtn').onclick = async () => {
-    if(!rawVideoUrl) return;
-    if(!navigator.share){ toast('이 브라우저는 공유를 지원하지 않습니다'); return; }
-    const btn = q('_vdShareBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spin"></span> 준비 중...';
-    try{
-      const r = await fetch(PROXY + encodeURIComponent(rawVideoUrl));
-      const blob = await r.blob();
-      const file = new File([blob], 'threads_video.mp4', {type: 'video/mp4'});
-      if(navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title:'Threads 영상'});
-      } else {
-        await navigator.share({url: rawVideoUrl, title:'Threads 영상'});
-      }
-    } catch(e){
-      if(!e.message.includes('AbortError') && !e.name.includes('AbortError'))
-        toast('공유 실패: ' + e.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '📤 공유 / 저장';
+      btn.innerHTML = '미디어 가져오기';
     }
   };
 }
