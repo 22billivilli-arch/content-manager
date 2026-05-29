@@ -1773,43 +1773,48 @@ function shortcodeToMediaId(sc){
 }
 
 async function fetchMediaItems(inputUrl){
-  // 1. Threads Graph API — children은 별도 엔드포인트로 조회
-  const sc = extractShortcode(inputUrl);
-  if(sc){
-    const token = localStorage.getItem('threads_token');
-    if(token){
+  const sc  = extractShortcode(inputUrl);
+  const mid = sc ? shortcodeToMediaId(sc) : null;
+  const apiErrors = [];
+
+  // 1. Threads Graph API — 만료된 토큰 대비, 사용 가능한 토큰 전부 시도
+  if(mid){
+    const tokens = [
+      localStorage.getItem('threads_token'),
+      ...FEED_ACCOUNTS.map(a => a.token),
+    ].filter((t, i, arr) => t && arr.indexOf(t) === i);
+
+    for(const token of tokens){
       try{
-        const mid = shortcodeToMediaId(sc);
-        if(mid){
-          const r = await fetch(
-            `https://graph.threads.net/v1.0/${mid}?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`,
+        const r  = await fetch(
+          `https://graph.threads.net/v1.0/${mid}?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`,
+          {signal: AbortSignal.timeout(8000)}
+        );
+        const d = await r.json();
+        if(!r.ok || d.error){
+          apiErrors.push(d.error?.message || `HTTP ${r.status}`);
+          continue;
+        }
+        if(d.media_type === 'CAROUSEL_ALBUM'){
+          const cr = await fetch(
+            `https://graph.threads.net/v1.0/${mid}/children?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`,
             {signal: AbortSignal.timeout(8000)}
           );
-          if(r.ok){
-            const d = await r.json();
-            if(d.media_type === 'CAROUSEL_ALBUM'){
-              // inline children expansion 미지원 → 별도 /children 호출
-              const cr = await fetch(
-                `https://graph.threads.net/v1.0/${mid}/children?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`,
-                {signal: AbortSignal.timeout(8000)}
-              );
-              if(cr.ok){
-                const cd = await cr.json();
-                const items = (cd.data||[])
-                  .filter(c => c.media_url)
-                  .map(c => ({type: c.media_type||'IMAGE', url: c.media_url}));
-                if(items.length) return items;
-              }
-            } else if(d.media_url){
-              return [{type: d.media_type||'VIDEO', url: d.media_url}];
-            }
+          if(cr.ok){
+            const cd = await cr.json();
+            const items = (cd.data||[])
+              .filter(c => c.media_url)
+              .map(c => ({type: c.media_type||'IMAGE', url: c.media_url, _src:'Graph API (carousel)'}));
+            if(items.length) return items;
           }
+        } else if(d.media_url){
+          return [{type: d.media_type||'VIDEO', url: d.media_url, _src:`Graph API (${d.media_type})`}];
         }
-      } catch(e){}
+      } catch(e){ apiErrors.push(e.message); }
     }
   }
 
-  // 2. microlink.io — 영상만 반환 (thumbnail을 사진으로 오인 방지)
+  // 2. microlink.io (Graph API 전부 실패한 경우만)
   try{
     const r = await fetch(
       `https://api.microlink.io/?url=${encodeURIComponent(inputUrl)}&video=true`,
@@ -1818,7 +1823,7 @@ async function fetchMediaItems(inputUrl){
     if(r.ok){
       const d = await r.json();
       const vurl = d.data?.video?.url || d.data?.video?.src;
-      if(vurl) return [{type:'VIDEO', url:vurl}];
+      if(vurl) return [{type:'VIDEO', url:vurl, _src:'microlink.io ⚠️'}];
     }
   } catch(e){}
 
@@ -1826,10 +1831,13 @@ async function fetchMediaItems(inputUrl){
   try{
     const html = await fetchHtmlViaProxy(inputUrl);
     const vurl = extractVideoUrl(html);
-    if(vurl) return [{type:'VIDEO', url:vurl}];
+    if(vurl) return [{type:'VIDEO', url:vurl, _src:'proxy scrape ⚠️'}];
   } catch(e){}
 
-  throw new Error('미디어를 찾을 수 없습니다. 게시물 URL을 확인해주세요.');
+  const hint = apiErrors.length
+    ? `\nAPI 오류: ${[...new Set(apiErrors)].join(' / ')}`
+    : (mid ? '' : '\nURL에서 게시물 ID를 찾을 수 없습니다');
+  throw new Error('미디어를 찾을 수 없습니다.' + hint);
 }
 
 // 멀티 프록시 blob 다운로드 (403 대응)
@@ -1935,8 +1943,9 @@ function renderVideoTab(){
         wrap.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;';
 
         const lbl = document.createElement('div');
-        lbl.style.cssText = 'padding:7px 12px;background:var(--bg3);font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);';
-        lbl.textContent = (isVid ? '🎬 영상' : '🖼️ 사진') + num;
+        lbl.style.cssText = 'padding:7px 12px;background:var(--bg3);font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;';
+        const srcColor = (item._src||'').includes('⚠️') ? 'var(--danger)' : 'var(--accent)';
+        lbl.innerHTML = `<span>${(isVid ? '🎬 영상' : '🖼️ 사진') + num}</span><span style="font-size:10px;color:${srcColor}">${item._src||''}</span>`;
         wrap.appendChild(lbl);
 
         if(isVid){
