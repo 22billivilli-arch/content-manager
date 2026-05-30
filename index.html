@@ -678,7 +678,7 @@ const FEED_ACCOUNTS = [
   { name:'dnfkagksekfkawnl', token:'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD' },
   { name:'ddack.life',       token:'THAALYAgagxE1BYlpmcmlRdk5yVER2TEtBalhwRkNZAcUpTNUlWUk5kR21TM01lNFRjZAkxOSG9kMzRhYWF3MFlFWWtybXZAXVTdfY1Fqa1pZAQU5ma3ZAEWXpZAb0ZAncXoyZA0N6TlFKenJIRlJVSURtLXUzZAjgxREg1YWhxMXg3ai1QNnpZAZA2tEWE5UZAXFIV09RVWcZD' },
   { name:'sou.0921',         token:'THAALYAgagxE1BYmJHUmw3eGNaTEJhZAi1kQTNzbzhFNlRHd1ZA4b1V4cjlaX25DREF5ZAm1ENTVZATHBkZAENuRHJVTzFFUm5GR292OV9XTkpnX3A3Nm9JMXpJd1oxcDg5Wk0za3FjUHR4SHlsSG9mYkN1Ql9SMXhGV1JrY0RZARjRyU040TWU3Mks1cXA4NFZAhRjgZD' },
-  { name:'hunya.pick',       token: localStorage.getItem('token_hunya') || null },
+  { name:'hunya.pick',       token:'THAALYAgagxE1BYlpLX19MVDYwTTJhdFNFeHhOZATIzN1dNTWZAMZAC1TRFlOZAVllLVFZAOGNaSktpZAjFwVjZArZAV9iVERELVE1X1hsb2FYcW9IZADA1R0RmSUJGRnhhdFJBd0xiQ0MxRlVrNWcya21ZAamZAPOTV4bVhwU2VqMzNvYlQ2VDd4QjdNVDd6MHd4Q3pUUFEZD' },
 ];
 
 // ═══════════════════════════════════════════════
@@ -1009,10 +1009,20 @@ function saveFavs(arr){ localStorage.setItem('fav_posts', JSON.stringify(arr)); 
 function toggleFav(post){
   let favs = getFavs();
   const idx = favs.findIndex(f=>f.id===post.id);
-  if(idx>=0){ favs.splice(idx,1); toast('즐겨찾기 해제'); }
-  else { favs.unshift({...post, _fav_at: Date.now(), _acc_name: tUser?.username}); toast('⭐ 즐겨찾기 저장', true); }
+  if(idx>=0){ favs.splice(idx,1); toast('즐겨찾기 해제'); saveFavs(favs); return false; }
+  // 즐겨찾기 저장 + 작성자 댓글 비동기 수집
+  const entry = {...post, _fav_at: Date.now(), _acc_name: tUser?.username};
+  favs.unshift(entry);
   saveFavs(favs);
-  return idx < 0; // true = starred
+  toast('⭐ 즐겨찾기 저장', true);
+  // 작성자 댓글 백그라운드 조회 후 저장
+  _getAuthorReply(post).then(reply => {
+    if(!reply) return;
+    const cur = getFavs();
+    const fi = cur.findIndex(f=>f.id===post.id);
+    if(fi>=0){ cur[fi]._author_reply = reply; saveFavs(cur); }
+  }).catch(()=>{});
+  return true;
 }
 function isFav(id){ return getFavs().some(f=>f.id===id); }
 
@@ -1134,8 +1144,25 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
     }
 
     statusEl.textContent = '발행 중...';
-    await apiPost(`${API}/${uid}/threads_publish`, {creation_id:containerId, access_token:acc.token});
-    statusEl.textContent = '✓ 발행 완료!';
+    const published = await apiPost(`${API}/${uid}/threads_publish`, {creation_id:containerId, access_token:acc.token});
+    const newPostId = published.id;
+
+    // 작성자 댓글(reply) 가져와서 동일하게 달기
+    const authorReply = await _getAuthorReply(post);
+    if(authorReply && newPostId){
+      try{
+        statusEl.textContent = '댓글 등록 중...';
+        const replyContainer = await apiPost(`${API}/${uid}/threads`, {
+          media_type: 'TEXT',
+          text: authorReply,
+          reply_to_id: newPostId,
+          access_token: acc.token,
+        });
+        await apiPost(`${API}/${uid}/threads_publish`, {creation_id:replyContainer.id, access_token:acc.token});
+      } catch(e){ console.warn('댓글 등록 실패:', e); }
+    }
+
+    statusEl.textContent = '✓ 발행 완료!' + (authorReply ? ' (댓글 포함)' : '');
     statusEl.style.color = 'var(--accent)';
     publishBtn.textContent = '✓ 완료';
   } catch(e){
@@ -1143,6 +1170,21 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
     statusEl.style.color = 'var(--danger)';
     publishBtn.disabled = false;
   }
+}
+
+async function _getAuthorReply(post){
+  // 즐겨찾기에 저장된 _author_reply 우선, 없으면 API로 조회
+  if(post._author_reply) return post._author_reply;
+  const accName = post._acc_name || tUser?.username;
+  if(!post.id) return null;
+  const token = FEED_ACCOUNTS.find(a=>a.name===accName)?.token
+             || FEED_ACCOUNTS.find(a=>a.token)?.token;
+  if(!token) return null;
+  try{
+    const d = await apiFetch(`${API}/${post.id}/replies?fields=id,text,username&access_token=${token}`);
+    const mine = (d.data||[]).find(r => r.username === accName);
+    return mine?.text || null;
+  } catch{ return null; }
 }
 
 // ═══════════════════════════════════════════════
