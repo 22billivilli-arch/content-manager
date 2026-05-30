@@ -1891,13 +1891,7 @@ function renderVideoTab(){
     document.getElementById('tokenModal').classList.add('open');
   };
 
-  // 토큰 유효성 표시 업데이트
-  function checkTokenBanner(){
-    const hasToken = !!(localStorage.getItem('threads_token') || FEED_ACCOUNTS.some(a=>a.token));
-    const allLookExpired = !hasToken;
-    if(allLookExpired) q('_vdTokenBanner').style.display = 'block';
-  }
-  checkTokenBanner();
+  function showTokenBanner(){ q('_vdTokenBanner').style.display = 'block'; }
 
   async function dlItem(url, fname, btn){
     const orig = btn.innerHTML;
@@ -2008,16 +2002,12 @@ function renderVideoTab(){
       });
 
       container.style.display = 'block';
-      // 폴백 경로 사용 시 토큰 만료 배너 표시
-      if(items.some(it => (it._src||'').includes('⚠️')))
-        q('_vdTokenBanner').style.display = 'block';
       toast(`미디어 ${items.length}개 발견`, true);
     } catch(e){
       q('_vdErr').style.display = 'block';
-      // API 오류(토큰 만료) 감지
-      if(e.message.includes('API 오류') || e.message.includes('190') || e.message.includes('expired')){
-        q('_vdTokenBanner').style.display = 'block';
-        q('_vdErr').textContent = '토큰 만료 — 위 안내에 따라 토큰을 재설정하세요.';
+      if(e.message.includes('190') || e.message.includes('expired')){
+        showTokenBanner();
+        q('_vdErr').textContent = '토큰 만료 — 🔑 토큰 설정을 눌러 새 토큰을 입력하세요.';
       } else {
         q('_vdErr').textContent = '오류: ' + e.message;
       }
@@ -2133,10 +2123,8 @@ document.getElementById('syncPullBtn').onclick = async () => {
 
 (async function init(){
   // 토큰 미설정 시 자동 주입
-  const DEFAULT_TOKEN = 'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD';
-  if(!localStorage.getItem('threads_token')){
-    localStorage.setItem('threads_token', DEFAULT_TOKEN);
-  }
+  // dnfkagksekfkawnl 토큰 — 항상 최신 상태 유지
+  localStorage.setItem('threads_token', 'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD');
   renderHeader();
   renderTopNav();   // 탭 즉시 렌더
   initCal();
