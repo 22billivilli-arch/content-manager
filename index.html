@@ -1865,6 +1865,11 @@ function renderVideoTab(){
     <div class="cp-tab-wrap">
       <div class="cp-head-row">
         <span class="cp-head-title">📥 Threads 미디어 다운로드</span>
+        <button id="_vdTokenBtn" style="padding:6px 14px;background:var(--bg4);border:1px solid var(--border2);color:var(--text2);border-radius:var(--r2);cursor:pointer;font-size:12px;font-family:inherit;">🔑 토큰 설정</button>
+      </div>
+      <div id="_vdTokenBanner" style="display:none;margin-bottom:12px;padding:10px 14px;background:rgba(255,85,85,.08);border:1px solid rgba(255,85,85,.35);border-radius:var(--r2);font-size:12px;color:var(--danger);line-height:1.6;">
+        ⚠️ Threads 토큰이 만료됐습니다.<br>
+        <span style="color:var(--text2);">threads_pipeline/.env의 <b>THREADS_ACCESS_TOKEN</b> 값을 🔑 토큰 설정에 붙여넣으세요.</span>
       </div>
       <div>
         <div class="cp-label">Threads 게시물 URL</div>
@@ -1879,6 +1884,20 @@ function renderVideoTab(){
   `;
 
   const q = id => fw.querySelector('#' + id);
+
+  // 토큰 설정 버튼 — 기존 모달 재사용
+  q('_vdTokenBtn').onclick = () => {
+    document.getElementById('tokenTa').value = localStorage.getItem('threads_token')||'';
+    document.getElementById('tokenModal').classList.add('open');
+  };
+
+  // 토큰 유효성 표시 업데이트
+  function checkTokenBanner(){
+    const hasToken = !!(localStorage.getItem('threads_token') || FEED_ACCOUNTS.some(a=>a.token));
+    const allLookExpired = !hasToken;
+    if(allLookExpired) q('_vdTokenBanner').style.display = 'block';
+  }
+  checkTokenBanner();
 
   async function dlItem(url, fname, btn){
     const orig = btn.innerHTML;
@@ -1989,10 +2008,19 @@ function renderVideoTab(){
       });
 
       container.style.display = 'block';
+      // 폴백 경로 사용 시 토큰 만료 배너 표시
+      if(items.some(it => (it._src||'').includes('⚠️')))
+        q('_vdTokenBanner').style.display = 'block';
       toast(`미디어 ${items.length}개 발견`, true);
     } catch(e){
       q('_vdErr').style.display = 'block';
-      q('_vdErr').textContent = '오류: ' + e.message;
+      // API 오류(토큰 만료) 감지
+      if(e.message.includes('API 오류') || e.message.includes('190') || e.message.includes('expired')){
+        q('_vdTokenBanner').style.display = 'block';
+        q('_vdErr').textContent = '토큰 만료 — 위 안내에 따라 토큰을 재설정하세요.';
+      } else {
+        q('_vdErr').textContent = '오류: ' + e.message;
+      }
     } finally {
       btn.disabled = false; btn.innerHTML = '미디어 가져오기';
     }
