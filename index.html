@@ -1905,7 +1905,7 @@ function renderVideoTab(){
         res = await fetch(CP_THREADS_API, {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({url: inputUrl}),
+          body: JSON.stringify({url: inputUrl, token: localStorage.getItem('threads_token') || ''}),
           signal: ctrl.signal,
         });
       } finally { clearTimeout(tid); }
