@@ -1825,90 +1825,8 @@ function shortcodeToMediaId(sc){
   return n.toString();
 }
 
-async function fetchMediaItems(inputUrl){
-  const sc  = extractShortcode(inputUrl);
-  const mid = sc ? shortcodeToMediaId(sc) : null;
-  const apiErrors = [];
-
-  // 1. Threads Graph API — 만료된 토큰 대비, 사용 가능한 토큰 전부 시도
-  if(mid){
-    const tokens = [
-      localStorage.getItem('threads_token'),
-      ...FEED_ACCOUNTS.map(a => a.token),
-    ].filter((t, i, arr) => t && arr.indexOf(t) === i);
-
-    for(const token of tokens){
-      try{
-        const r  = await fetch(
-          `https://graph.threads.net/v1.0/${mid}?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`,
-          {signal: AbortSignal.timeout(8000)}
-        );
-        const d = await r.json();
-        if(!r.ok || d.error){
-          apiErrors.push(d.error?.message || `HTTP ${r.status}`);
-          continue;
-        }
-        if(d.media_type === 'CAROUSEL_ALBUM'){
-          const cr = await fetch(
-            `https://graph.threads.net/v1.0/${mid}/children?fields=id,media_type,media_url,thumbnail_url&access_token=${token}`,
-            {signal: AbortSignal.timeout(8000)}
-          );
-          if(cr.ok){
-            const cd = await cr.json();
-            const items = (cd.data||[])
-              .filter(c => c.media_url)
-              .map(c => ({type: c.media_type||'IMAGE', url: c.media_url, _src:'Graph API (carousel)'}));
-            if(items.length) return items;
-          }
-        } else if(d.media_url){
-          return [{type: d.media_type||'VIDEO', url: d.media_url, _src:`Graph API (${d.media_type})`}];
-        }
-      } catch(e){ apiErrors.push(e.message); }
-    }
-  }
-
-  // 2. microlink.io (Graph API 전부 실패한 경우만)
-  try{
-    const r = await fetch(
-      `https://api.microlink.io/?url=${encodeURIComponent(inputUrl)}&video=true`,
-      {signal: AbortSignal.timeout(20000)}
-    );
-    if(r.ok){
-      const d = await r.json();
-      const vurl = d.data?.video?.url || d.data?.video?.src;
-      if(vurl) return [{type:'VIDEO', url:vurl, _src:'microlink.io ⚠️'}];
-    }
-  } catch(e){}
-
-  // 3. 프록시 HTML 스크래핑
-  try{
-    const html = await fetchHtmlViaProxy(inputUrl);
-    const vurl = extractVideoUrl(html);
-    if(vurl) return [{type:'VIDEO', url:vurl, _src:'proxy scrape ⚠️'}];
-  } catch(e){}
-
-  const hint = apiErrors.length
-    ? `\nAPI 오류: ${[...new Set(apiErrors)].join(' / ')}`
-    : (mid ? '' : '\nURL에서 게시물 ID를 찾을 수 없습니다');
-  throw new Error('미디어를 찾을 수 없습니다.' + hint);
-}
-
-// 멀티 프록시 blob 다운로드 (403 대응)
-async function fetchBlob(url){
-  try{
-    const r = await fetch(url, {signal: AbortSignal.timeout(30000)});
-    if(r.ok){ const b = await r.blob(); if(b.size > 1000) return b; }
-  } catch(e){}
-  try{
-    const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(30000)});
-    if(r.ok){ const b = await r.blob(); if(b.size > 1000) return b; }
-  } catch(e){}
-  try{
-    const r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, {signal: AbortSignal.timeout(30000)});
-    if(r.ok){ const b = await r.blob(); if(b.size > 1000) return b; }
-  } catch(e){}
-  throw new Error('CDN이 다운로드를 차단합니다. 새 탭에서 길게 눌러 저장하세요.');
-}
+const CP_THREADS_API = 'https://cp-converter.vercel.app/api/threads-images';
+const CP_PROXY_API   = 'https://cp-converter.vercel.app/api/threads-proxy';
 
 function renderVideoTab(){
   const fw = document.getElementById('feedWrap');
@@ -1918,11 +1836,6 @@ function renderVideoTab(){
     <div class="cp-tab-wrap">
       <div class="cp-head-row">
         <span class="cp-head-title">📥 Threads 미디어 다운로드</span>
-        <button id="_vdTokenBtn" style="padding:6px 14px;background:var(--bg4);border:1px solid var(--border2);color:var(--text2);border-radius:var(--r2);cursor:pointer;font-size:12px;font-family:inherit;">🔑 토큰 설정</button>
-      </div>
-      <div id="_vdTokenBanner" style="display:none;margin-bottom:12px;padding:10px 14px;background:rgba(255,85,85,.08);border:1px solid rgba(255,85,85,.35);border-radius:var(--r2);font-size:12px;color:var(--danger);line-height:1.6;">
-        ⚠️ Threads 토큰이 만료됐습니다.<br>
-        <span style="color:var(--text2);">threads_pipeline/.env의 <b>THREADS_ACCESS_TOKEN</b> 값을 🔑 토큰 설정에 붙여넣으세요.</span>
       </div>
       <div>
         <div class="cp-label">Threads 게시물 URL</div>
@@ -1938,19 +1851,23 @@ function renderVideoTab(){
 
   const q = id => fw.querySelector('#' + id);
 
-  // 토큰 설정 버튼 — 기존 모달 재사용
-  q('_vdTokenBtn').onclick = () => {
-    document.getElementById('tokenTa').value = localStorage.getItem('threads_token')||'';
-    document.getElementById('tokenModal').classList.add('open');
-  };
-
-  function showTokenBanner(){ q('_vdTokenBanner').style.display = 'block'; }
-
-  async function dlItem(url, fname, btn){
+  // CP_converter Vercel 프록시로 다운로드/공유
+  async function dlItem(rawUrl, fname, btn){
     const orig = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 다운로드 중...';
     try{
-      const blob = await fetchBlob(url);
+      const proxyUrl = CP_PROXY_API + '?url=' + encodeURIComponent(rawUrl);
+      const r = await fetch(proxyUrl, {signal: AbortSignal.timeout(30000)});
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = await r.blob();
+      if(isIOS && navigator.canShare){
+        const file = new File([blob], fname, {type: blob.type});
+        if(navigator.canShare({files:[file]})){
+          await navigator.share({files:[file], title: fname});
+          toast('앨범 저장 완료 ✓', true);
+          return;
+        }
+      }
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl; a.download = fname;
@@ -1958,31 +1875,8 @@ function renderVideoTab(){
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
       toast('다운로드 시작 ✓', true);
     } catch(e){
-      toast(e.message);
-      window.open(url, '_blank');
-    } finally { btn.disabled = false; btn.innerHTML = orig; }
-  }
-
-  async function shareItem(url, fname, btn){
-    const orig = btn.innerHTML;
-    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 준비 중...';
-    try{
-      const blob = await fetchBlob(url);
-      const file = new File([blob], fname, {type: blob.type});
-      if(navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title: fname});
-        toast('앨범 저장 완료 ✓', true);
-      } else if(navigator.share){
-        await navigator.share({url, title: fname});
-      } else {
-        window.open(url, '_blank');
-        toast('새 탭에서 열림 — 길게 눌러 저장하세요');
-      }
-    } catch(e){
-      if(!e.name?.includes('AbortError')){
-        toast('공유 실패: ' + e.message);
-        window.open(url, '_blank');
-      }
+      toast('다운로드 실패 — 새 탭에서 열립니다');
+      window.open(rawUrl, '_blank');
     } finally { btn.disabled = false; btn.innerHTML = orig; }
   }
 
@@ -1995,75 +1889,67 @@ function renderVideoTab(){
     q('_vdItems').innerHTML = '';
     q('_vdErr').style.display = 'none';
     try{
-      const items = await fetchMediaItems(inputUrl);
+      const res = await fetch(CP_THREADS_API, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({url: inputUrl}),
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await res.json();
+      if(data.error) throw new Error(data.error);
+
+      const images = data.images || [];
+      const videos = data.videos || [];
+      const total  = images.length + videos.length;
+
+      if(total === 0){
+        q('_vdErr').style.display = 'block';
+        q('_vdErr').textContent = data.message || '이미지/영상을 찾을 수 없습니다.';
+        return;
+      }
+
       const container = q('_vdItems');
-      container.innerHTML = '';
+      const ts = Date.now();
 
-      items.forEach((item, idx) => {
-        const isVid = item.type === 'VIDEO';
-        const ext   = isVid ? 'mp4' : 'jpg';
-        const fname = `threads_${Date.now()}_${idx+1}.${ext}`;
-        const num   = items.length > 1 ? ` ${idx+1}` : '';
-
+      // 사진
+      images.forEach((url, idx) => {
+        const fname = `threads_${ts}_${idx+1}.jpg`;
         const wrap = document.createElement('div');
         wrap.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;';
+        wrap.innerHTML = `
+          <div style="padding:7px 12px;background:var(--bg3);font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
+            🖼️ 사진${images.length>1?' '+(idx+1):''}
+          </div>
+          <img src="${url}" style="width:100%;max-height:360px;object-fit:contain;display:block;background:#000;" alt="">
+          <div style="padding:10px;">
+            <button class="cp-btn" style="margin:0;font-size:13px;">📥 사진 저장</button>
+          </div>`;
+        wrap.querySelector('.cp-btn').onclick = function(){ dlItem(url, fname, this); };
+        container.appendChild(wrap);
+      });
 
-        const lbl = document.createElement('div');
-        lbl.style.cssText = 'padding:7px 12px;background:var(--bg3);font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;';
-        const srcColor = (item._src||'').includes('⚠️') ? 'var(--danger)' : 'var(--accent)';
-        lbl.innerHTML = `<span>${(isVid ? '🎬 영상' : '🖼️ 사진') + num}</span><span style="font-size:10px;color:${srcColor}">${item._src||''}</span>`;
-        wrap.appendChild(lbl);
-
-        if(isVid){
-          const v = document.createElement('video');
-          v.controls = true; v.playsInline = true;
-          v.style.cssText = 'width:100%;max-height:360px;background:#000;display:block;';
-          v.src = item.url;
-          // 직접 URL 실패 시 corsproxy fallback
-          v.onerror = () => {
-            if(!v.src.startsWith('https://corsproxy.io'))
-              v.src = `https://corsproxy.io/?${encodeURIComponent(item.url)}`;
-          };
-          wrap.appendChild(v);
-        } else {
-          const img = document.createElement('img');
-          img.src = item.url;
-          img.style.cssText = 'width:100%;max-height:360px;object-fit:contain;display:block;background:#000;';
-          img.alt = '이미지';
-          wrap.appendChild(img);
-        }
-
-        const btnRow = document.createElement('div');
-        btnRow.style.cssText = 'display:flex;gap:8px;padding:10px;';
-
-        const dlBtn = document.createElement('button');
-        dlBtn.className = 'cp-btn';
-        dlBtn.style.cssText = 'flex:1;margin:0;font-size:13px;';
-        dlBtn.innerHTML = `📥 ${isVid?'영상':'사진'} 저장`;
-        dlBtn.onclick = () => dlItem(item.url, fname, dlBtn);
-
-        const shBtn = document.createElement('button');
-        shBtn.className = 'cp-btn';
-        shBtn.style.cssText = 'flex:1;margin:0;font-size:13px;background:var(--bg4);color:var(--text);border:1px solid var(--border2);';
-        shBtn.innerHTML = '📤 공유 / 앨범저장';
-        shBtn.onclick = () => shareItem(item.url, fname, shBtn);
-
-        btnRow.appendChild(dlBtn);
-        btnRow.appendChild(shBtn);
-        wrap.appendChild(btnRow);
+      // 영상
+      videos.forEach((url, idx) => {
+        const fname = `threads_${ts}_video${idx+1}.mp4`;
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;';
+        wrap.innerHTML = `
+          <div style="padding:7px 12px;background:var(--bg3);font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
+            🎬 영상${videos.length>1?' '+(idx+1):''}
+          </div>
+          <video src="${url}" controls playsinline style="width:100%;max-height:360px;background:#000;display:block;"></video>
+          <div style="padding:10px;">
+            <button class="cp-btn" style="margin:0;font-size:13px;">📥 영상 저장</button>
+          </div>`;
+        wrap.querySelector('.cp-btn').onclick = function(){ dlItem(url, fname, this); };
         container.appendChild(wrap);
       });
 
       container.style.display = 'block';
-      toast(`미디어 ${items.length}개 발견`, true);
+      toast(`미디어 ${total}개 발견`, true);
     } catch(e){
       q('_vdErr').style.display = 'block';
-      if(e.message.includes('190') || e.message.includes('expired')){
-        showTokenBanner();
-        q('_vdErr').textContent = '토큰 만료 — 🔑 토큰 설정을 눌러 새 토큰을 입력하세요.';
-      } else {
-        q('_vdErr').textContent = '오류: ' + e.message;
-      }
+      q('_vdErr').textContent = '오류: ' + e.message;
     } finally {
       btn.disabled = false; btn.innerHTML = '미디어 가져오기';
     }
