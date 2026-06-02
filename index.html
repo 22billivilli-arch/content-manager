@@ -1144,31 +1144,42 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
     }
 
     statusEl.textContent = '발행 중...';
-    const published = await apiPost(`${API}/${uid}/threads_publish`, {creation_id:containerId, access_token:acc.token});
-    const newPostId = published.id;
+    const publishRes = await apiPost(`${API}/${uid}/threads_publish`, {creation_id:containerId, access_token:acc.token});
 
-    // 작성자 댓글(reply) 가져와서 동일하게 달기
-    const authorReply = await _getAuthorReply(post);
-    if(authorReply && newPostId){
-      try{
-        statusEl.textContent = '댓글 등록 중...';
-        const replyContainer = await apiPost(`${API}/${uid}/threads`, {
-          media_type: 'TEXT',
-          text: authorReply,
-          reply_to_id: newPostId,
-          access_token: acc.token,
-        });
-        await apiPost(`${API}/${uid}/threads_publish`, {creation_id:replyContainer.id, access_token:acc.token});
-      } catch(e){ console.warn('댓글 등록 실패:', e); }
-    }
-
-    statusEl.textContent = '✓ 발행 완료!' + (authorReply ? ' (댓글 포함)' : '');
+    // ── 발행 성공 처리 ──
+    statusEl.textContent = '✓ 발행 완료!';
     statusEl.style.color = 'var(--accent)';
     publishBtn.textContent = '✓ 완료';
+
+    // ── 작성자 댓글 등록 (실패해도 발행 결과에 영향 없음) ──
+    const newPostId = publishRes?.id;
+    if(newPostId){
+      _postAuthorReply(post, uid, acc.token, newPostId, statusEl).catch(()=>{});
+    }
+
   } catch(e){
     statusEl.textContent = '오류: '+(e.message||String(e));
     statusEl.style.color = 'var(--danger)';
     publishBtn.disabled = false;
+  }
+}
+
+async function _postAuthorReply(post, uid, token, newPostId, statusEl){
+  try{
+    const reply = await _getAuthorReply(post);
+    if(!reply) return;
+    statusEl.textContent = '✓ 발행 완료! (댓글 등록 중...)';
+    const container = await apiPost(`${API}/${uid}/threads`, {
+      media_type:   'TEXT',
+      text:         reply,
+      reply_to_id:  newPostId,
+      access_token: token,
+    });
+    await apiPost(`${API}/${uid}/threads_publish`, {creation_id:container.id, access_token:token});
+    statusEl.textContent = '✓ 발행 완료! (댓글 포함)';
+  } catch(e){
+    console.warn('댓글 등록 실패:', e);
+    // 이미 발행 완료 메시지가 표시돼 있으므로 덮어쓰지 않음
   }
 }
 
