@@ -1839,10 +1839,11 @@ function renderVideoTab(){
       </div>
       <div>
         <div class="cp-label">Threads 게시물 URL</div>
-        <input class="cp-input" id="_vdUrl" type="url"
+        <input class="cp-input" id="_vdUrl" type="text"
           placeholder="https://www.threads.net/@username/post/..."
           style="width:100%;font-size:13px;">
         <button class="cp-btn" id="_vdFetchBtn" style="margin-top:10px;">미디어 가져오기</button>
+        <button class="cp-btn" id="_vdClearBtn" style="margin-top:8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border2);">URL 지우기</button>
       </div>
       <div id="_vdItems" style="display:none;margin-top:16px;"></div>
       <div id="_vdErr" style="display:none;margin-top:12px;" class="cp-result err"></div>
@@ -1880,6 +1881,14 @@ function renderVideoTab(){
     } finally { btn.disabled = false; btn.innerHTML = orig; }
   }
 
+  q('_vdClearBtn').onclick = () => {
+    q('_vdUrl').value = '';
+    q('_vdItems').style.display = 'none';
+    q('_vdItems').innerHTML = '';
+    q('_vdErr').style.display = 'none';
+    q('_vdUrl').focus();
+  };
+
   q('_vdFetchBtn').onclick = async () => {
     const inputUrl = q('_vdUrl').value.trim();
     if(!inputUrl){ toast('Threads URL을 입력해주세요'); return; }
@@ -1889,12 +1898,17 @@ function renderVideoTab(){
     q('_vdItems').innerHTML = '';
     q('_vdErr').style.display = 'none';
     try{
-      const res = await fetch(CP_THREADS_API, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({url: inputUrl}),
-        signal: AbortSignal.timeout(20000),
-      });
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 20000);
+      let res;
+      try{
+        res = await fetch(CP_THREADS_API, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({url: inputUrl}),
+          signal: ctrl.signal,
+        });
+      } finally { clearTimeout(tid); }
       const data = await res.json();
       if(data.error) throw new Error(data.error);
 
