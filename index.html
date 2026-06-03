@@ -1857,10 +1857,10 @@ function renderVideoTab(){
     const orig = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 다운로드 중...';
     try{
-      // 1. 직접 blob fetch 시도 (CORS 허용 CDN)
+      // CDN CORS=* → credentials:omit 으로 직접 fetch
       let blob = null;
       try{
-        const r = await fetch(rawUrl);
+        const r = await fetch(rawUrl, {mode:'cors', credentials:'omit'});
         if(r.ok){
           const b = await r.blob();
           if(b.size > 1000 && !b.type.startsWith('text')) blob = b;
@@ -1868,12 +1868,14 @@ function renderVideoTab(){
       } catch(_){}
 
       if(blob){
-        // blob 획득 성공 → 갤러리 저장 또는 다운로드
-        const file = new File([blob], fname, {type: blob.type});
-        if(navigator.canShare && navigator.canShare({files:[file]})){
-          await navigator.share({files:[file], title: fname});
-          toast('앨범 저장 완료 ✓', true);
-          return;
+        // blob 성공 → iOS/Android 갤러리 저장 or PC 다운로드
+        if(navigator.share){
+          try{
+            const file = new File([blob], fname, {type: blob.type});
+            await navigator.share({files:[file], title: fname});
+            toast('앨범 저장 완료 ✓', true);
+            return;
+          } catch(se){ if(se.name==='AbortError') return; }
         }
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1882,14 +1884,9 @@ function renderVideoTab(){
         setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
         toast('다운로드 시작 ✓', true);
       } else {
-        // blob 실패 → Web Share로 URL 공유 (모바일: 공유시트에서 저장)
-        if(navigator.share){
-          await navigator.share({url: rawUrl, title: fname});
-          toast('공유 창에서 저장하세요 📥', true);
-        } else {
-          window.open(rawUrl, '_blank');
-          toast('새 탭에서 열림 — 길게 눌러 저장하세요');
-        }
+        // blob 실패 → 새 탭 (사용자가 직접 저장)
+        window.open(rawUrl, '_blank');
+        toast('새 탭에서 영상을 길게 눌러 저장하세요');
       }
     } catch(e){
       if(!e.name?.includes('AbortError')){
