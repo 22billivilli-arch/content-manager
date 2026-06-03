@@ -1884,55 +1884,18 @@ function renderVideoTab(){
   const q = id => fw.querySelector('#' + id);
 
   // CP_converter Vercel 프록시로 다운로드/공유
-  async function dlItem(rawUrl, fname, btn){
-    const orig = btn.innerHTML;
-    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 다운로드 중...';
-
-    // 형제 <video> 요소의 currentSrc 가져오기 (onerror 후 corsproxy로 전환됐을 수 있음)
-    const videoEl = btn.closest('div')?.parentElement?.querySelector('video');
-    const activeUrl = (videoEl?.currentSrc && videoEl.currentSrc !== '') ? videoEl.currentSrc : rawUrl;
-
-    async function tryBlob(url){
-      const r = await fetch(url, {credentials:'omit'});
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const b = await r.blob();
-      if(b.size < 1000 || b.type.startsWith('text')) throw new Error('invalid');
-      return b;
+  function dlItem(rawUrl, fname, btn){
+    if(fname.endsWith('.mp4')){
+      // 이미 재생 중인 <video> 요소를 오버레이로 — CDN 재요청 없음
+      const videoEl = btn.closest('div')?.parentElement?.querySelector('video');
+      const playUrl = (videoEl?.currentSrc && videoEl.currentSrc.startsWith('http'))
+                      ? videoEl.currentSrc : rawUrl;
+      _showVideoSaveOverlay(playUrl);
+    } else {
+      // 이미지: 새 탭에서 길게 눌러 저장
+      window.open(rawUrl, '_blank');
+      toast('이미지를 길게 눌러 저장하세요');
     }
-
-    try{
-      // 1. 실제 재생 URL로 blob 시도 → 원본 URL 재시도
-      let blob = null;
-      try{ blob = await tryBlob(activeUrl); } catch(_){}
-      if(!blob && activeUrl !== rawUrl){
-        try{ blob = await tryBlob(rawUrl); } catch(_){}
-      }
-
-      if(blob){
-        if(navigator.share){
-          try{
-            const file = new File([blob], fname, {type: blob.type});
-            await navigator.share({files:[file], title: fname});
-            toast('앨범 저장 완료 ✓', true);
-            return;
-          } catch(se){ if(se.name==='AbortError') return; }
-        }
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl; a.download = fname;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-        toast('다운로드 시작 ✓', true);
-      } else if(fname.endsWith('.mp4')){
-        // 영상 → 오버레이로 롱프레스 저장 안내
-        _showVideoSaveOverlay(activeUrl);
-      } else {
-        window.open(rawUrl, '_blank');
-        toast('새 탭에서 이미지를 길게 눌러 저장하세요');
-      }
-    } catch(e){
-      if(!e.name?.includes('AbortError')) _showVideoSaveOverlay(activeUrl);
-    } finally { btn.disabled = false; btn.innerHTML = orig; }
   }
 
   q('_vdClearBtn').onclick = () => {
