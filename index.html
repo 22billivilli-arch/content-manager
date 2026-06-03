@@ -1828,6 +1828,36 @@ function shortcodeToMediaId(sc){
 const CP_THREADS_API = 'https://cp-converter.vercel.app/api/threads-images';
 const CP_PROXY_API   = 'https://cp-converter.vercel.app/api/threads-proxy';
 
+function _showVideoSaveOverlay(videoUrl){
+  // 기존 오버레이 제거
+  const old = document.getElementById('_vidSaveOverlay');
+  if(old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = '_vidSaveOverlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:9999;background:#000;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+  `;
+  overlay.innerHTML = `
+    <div style="position:absolute;top:14px;right:14px;">
+      <button id="_vidOverlayClose" style="background:rgba(255,255,255,0.15);border:none;color:#fff;
+        width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <video src="${videoUrl}" controls playsinline autoplay
+      style="width:100%;max-height:70vh;object-fit:contain;"></video>
+    <div style="text-align:center;padding:0 20px;">
+      <div style="font-size:15px;font-weight:600;color:#fff;margin-bottom:6px;">📱 영상을 길게 눌러 저장하세요</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6);">
+        iOS: 영상 위에서 꾹 누르면 "비디오 저장" 옵션이 나타납니다<br>
+        Android: 영상 위에서 길게 누르면 저장 메뉴가 표시됩니다
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('_vidOverlayClose').onclick = () => overlay.remove();
+}
+
 function renderVideoTab(){
   const fw = document.getElementById('feedWrap');
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -1857,7 +1887,9 @@ function renderVideoTab(){
     const orig = btn.innerHTML;
     btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 다운로드 중...';
     try{
-      // CDN CORS=* → credentials:omit 으로 직접 fetch
+      const isVidFile = fname.endsWith('.mp4');
+
+      // 1. 직접 blob fetch 시도
       let blob = null;
       try{
         const r = await fetch(rawUrl, {mode:'cors', credentials:'omit'});
@@ -1868,7 +1900,7 @@ function renderVideoTab(){
       } catch(_){}
 
       if(blob){
-        // blob 성공 → iOS/Android 갤러리 저장 or PC 다운로드
+        // blob 성공 → 갤러리 저장 or 다운로드
         if(navigator.share){
           try{
             const file = new File([blob], fname, {type: blob.type});
@@ -1883,10 +1915,13 @@ function renderVideoTab(){
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
         toast('다운로드 시작 ✓', true);
+      } else if(isVidFile){
+        // 영상 blob 실패 → 풀스크린 오버레이로 롱프레스 저장 안내
+        _showVideoSaveOverlay(rawUrl);
       } else {
-        // blob 실패 → 새 탭 (사용자가 직접 저장)
+        // 이미지 blob 실패
         window.open(rawUrl, '_blank');
-        toast('새 탭에서 영상을 길게 눌러 저장하세요');
+        toast('새 탭에서 이미지를 길게 눌러 저장하세요');
       }
     } catch(e){
       if(!e.name?.includes('AbortError')){
