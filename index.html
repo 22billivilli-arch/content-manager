@@ -1886,13 +1886,18 @@ function renderVideoTab(){
   // CP_converter Vercel 프록시로 다운로드/공유
   function dlItem(rawUrl, fname, btn){
     if(fname.endsWith('.mp4')){
-      // 이미 재생 중인 <video> 요소를 오버레이로 — CDN 재요청 없음
       const videoEl = btn.closest('div')?.parentElement?.querySelector('video');
       const playUrl = (videoEl?.currentSrc && videoEl.currentSrc.startsWith('http'))
                       ? videoEl.currentSrc : rawUrl;
+      // iOS: 네이티브 전체화면 → 공유/저장 버튼 사용
+      if(videoEl && videoEl.webkitEnterFullscreen){
+        videoEl.play().catch(()=>{});
+        videoEl.webkitEnterFullscreen();
+        return;
+      }
+      // 비iOS: 오버레이
       _showVideoSaveOverlay(playUrl);
     } else {
-      // 이미지: 새 탭에서 길게 눌러 저장
       window.open(rawUrl, '_blank');
       toast('이미지를 길게 눌러 저장하세요');
     }
