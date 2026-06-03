@@ -1091,6 +1091,20 @@ async function apiPost(url, params){
 }
 
 // ── 발행 ─────────────────────────────────────────
+async function refreshPostMedia(postId, token){
+  try{
+    const d = await apiFetch(`${API}/${postId}?fields=media_url,media_type&access_token=${token}`);
+    return d.media_url || null;
+  } catch(e){ return null; }
+}
+
+async function refreshChildren(postId, token){
+  try{
+    const d = await apiFetch(`${API}/${postId}/children?fields=id,media_type,media_url&access_token=${token}`);
+    return d.data || [];
+  } catch(e){ return null; }
+}
+
 async function publishPost(post, accIdx, statusEl, publishBtn){
   const acc = FEED_ACCOUNTS[accIdx];
   if(!acc?.token){ statusEl.textContent='토큰 없음'; return; }
@@ -1104,13 +1118,23 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
     const mt = post.media_type;
     let containerId;
 
-    if(mt==='IMAGE' && post.media_url){
+    if(mt==='IMAGE'){
+      statusEl.textContent = '미디어 URL 갱신 중...';
+      const freshUrl = (post.id ? await refreshPostMedia(post.id, acc.token) : null) || post.media_url;
+      if(!freshUrl) throw new Error('이미지 URL을 가져올 수 없습니다');
       statusEl.textContent = '이미지 컨테이너 생성 중...';
-      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'IMAGE', image_url:post.media_url, text, access_token:acc.token});
+      const params = {media_type:'IMAGE', image_url:freshUrl, access_token:acc.token};
+      if(text) params.text = text;
+      const res = await apiPost(`${API}/${uid}/threads`, params);
       containerId = res.id;
-    } else if(mt==='VIDEO' && post.media_url){
+    } else if(mt==='VIDEO'){
+      statusEl.textContent = '미디어 URL 갱신 중...';
+      const freshUrl = (post.id ? await refreshPostMedia(post.id, acc.token) : null) || post.media_url;
+      if(!freshUrl) throw new Error('영상 URL을 가져올 수 없습니다');
       statusEl.textContent = '영상 업로드 중...';
-      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'VIDEO', video_url:post.media_url, text, access_token:acc.token});
+      const params = {media_type:'VIDEO', video_url:freshUrl, access_token:acc.token};
+      if(text) params.text = text;
+      const res = await apiPost(`${API}/${uid}/threads`, params);
       containerId = res.id;
       for(let i=0; i<20; i++){
         await new Promise(r=>setTimeout(r,3000));
@@ -1119,12 +1143,15 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
         if(s.status==='FINISHED') break;
         if(s.status==='ERROR') throw new Error(s.error_message||'영상 처리 실패');
       }
-    } else if(mt==='CAROUSEL_ALBUM' && post._children?.length){
-      const chs = post._children;
+    } else if(mt==='CAROUSEL_ALBUM'){
+      statusEl.textContent = '미디어 URL 갱신 중...';
+      const freshChildren = (post.id ? await refreshChildren(post.id, acc.token) : null) || post._children;
+      if(!freshChildren?.length) throw new Error('캐러셀 미디어를 가져올 수 없습니다');
       const childIds = [];
-      for(let i=0; i<chs.length; i++){
-        statusEl.textContent = `미디어 ${i+1}/${chs.length} 업로드 중...`;
-        const c = chs[i];
+      for(let i=0; i<freshChildren.length; i++){
+        statusEl.textContent = `미디어 ${i+1}/${freshChildren.length} 업로드 중...`;
+        const c = freshChildren[i];
+        if(!c.media_url) throw new Error(`미디어 ${i+1} URL 없음`);
         const isVid = c.media_type==='VIDEO';
         const r = await apiPost(`${API}/${uid}/threads`, {
           media_type: isVid?'VIDEO':'IMAGE',
@@ -1138,6 +1165,7 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
       const res = await apiPost(`${API}/${uid}/threads`, {media_type:'CAROUSEL', children:childIds.join(','), text, access_token:acc.token});
       containerId = res.id;
     } else {
+      if(!text) throw new Error('텍스트 내용이 없습니다');
       statusEl.textContent = '텍스트 게시물 생성 중...';
       const res = await apiPost(`${API}/${uid}/threads`, {media_type:'TEXT', text, access_token:acc.token});
       containerId = res.id;
