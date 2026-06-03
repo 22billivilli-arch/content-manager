@@ -1105,6 +1105,11 @@ async function refreshChildren(postId, token){
   } catch(e){ return null; }
 }
 
+// 원본 계정 토큰 조회 (media_url은 본인 계정 토큰으로만 갱신 가능)
+function getSrcToken(post, fallbackToken){
+  return FEED_ACCOUNTS.find(a=>a.name===post._acc_name)?.token || fallbackToken;
+}
+
 async function publishPost(post, accIdx, statusEl, publishBtn){
   const acc = FEED_ACCOUNTS[accIdx];
   if(!acc?.token){ statusEl.textContent='토큰 없음'; return; }
@@ -1116,11 +1121,12 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
     const uid = me.id;
     const text = post.text||'';
     const mt = post.media_type;
+    const srcToken = getSrcToken(post, acc.token);
     let containerId;
 
     if(mt==='IMAGE'){
       statusEl.textContent = '미디어 URL 갱신 중...';
-      const freshUrl = (post.id ? await refreshPostMedia(post.id, acc.token) : null) || post.media_url;
+      const freshUrl = (post.id ? await refreshPostMedia(post.id, srcToken) : null) || post.media_url;
       if(!freshUrl) throw new Error('이미지 URL을 가져올 수 없습니다');
       statusEl.textContent = '이미지 컨테이너 생성 중...';
       const params = {media_type:'IMAGE', image_url:freshUrl, access_token:acc.token};
@@ -1129,7 +1135,7 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
       containerId = res.id;
     } else if(mt==='VIDEO'){
       statusEl.textContent = '미디어 URL 갱신 중...';
-      const freshUrl = (post.id ? await refreshPostMedia(post.id, acc.token) : null) || post.media_url;
+      const freshUrl = (post.id ? await refreshPostMedia(post.id, srcToken) : null) || post.media_url;
       if(!freshUrl) throw new Error('영상 URL을 가져올 수 없습니다');
       statusEl.textContent = '영상 업로드 중...';
       const params = {media_type:'VIDEO', video_url:freshUrl, access_token:acc.token};
@@ -1145,7 +1151,7 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
       }
     } else if(mt==='CAROUSEL_ALBUM'){
       statusEl.textContent = '미디어 URL 갱신 중...';
-      const freshChildren = (post.id ? await refreshChildren(post.id, acc.token) : null) || post._children;
+      const freshChildren = (post.id ? await refreshChildren(post.id, srcToken) : null) || post._children;
       if(!freshChildren?.length) throw new Error('캐러셀 미디어를 가져올 수 없습니다');
       const childIds = [];
       for(let i=0; i<freshChildren.length; i++){
