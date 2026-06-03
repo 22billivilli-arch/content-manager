@@ -1165,6 +1165,17 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
           is_carousel_item:'true',
           access_token:acc.token
         });
+        if(!r.id) throw new Error(`미디어 ${i+1} 컨테이너 생성 실패`);
+        if(isVid){
+          for(let j=0; j<30; j++){
+            await new Promise(res=>setTimeout(res,3000));
+            const s = await apiFetch(`${API}/${r.id}?fields=status,error_message&access_token=${acc.token}`);
+            statusEl.textContent = `영상 ${i+1} 인코딩 중... (${(j+1)*3}s)`;
+            if(s.status==='FINISHED') break;
+            if(s.status==='ERROR') throw new Error(s.error_message||`영상 ${i+1} 처리 실패`);
+            if(j===29) throw new Error(`영상 ${i+1} 인코딩 타임아웃`);
+          }
+        }
         childIds.push(r.id);
       }
       statusEl.textContent = '캐러셀 생성 중...';
