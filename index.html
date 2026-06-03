@@ -1104,28 +1104,13 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
     const mt = post.media_type;
     let containerId;
 
-    // 미디어 URL 갱신 (즐겨찾기 저장 후 CDN URL 만료 대비)
-    let freshPost = {...post};
-    if(post.id && (mt==='IMAGE'||mt==='VIDEO')){
-      try{
-        const fresh = await apiFetch(`${API}/${post.id}?fields=media_url,media_type&access_token=${acc.token}`);
-        if(fresh.media_url) freshPost.media_url = fresh.media_url;
-      } catch(_){}
-    }
-    if(mt==='CAROUSEL_ALBUM' && post._children?.length && post.id){
-      try{
-        const cr = await apiFetch(`${API}/${post.id}/children?fields=id,media_type,media_url&access_token=${acc.token}`);
-        if(cr.data?.length) freshPost._children = cr.data;
-      } catch(_){}
-    }
-
-    if(mt==='IMAGE' && freshPost.media_url){
+    if(mt==='IMAGE' && post.media_url){
       statusEl.textContent = '이미지 컨테이너 생성 중...';
-      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'IMAGE', image_url:freshPost.media_url, text, access_token:acc.token});
+      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'IMAGE', image_url:post.media_url, text, access_token:acc.token});
       containerId = res.id;
-    } else if(mt==='VIDEO' && freshPost.media_url){
+    } else if(mt==='VIDEO' && post.media_url){
       statusEl.textContent = '영상 업로드 중...';
-      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'VIDEO', video_url:freshPost.media_url, text, access_token:acc.token});
+      const res = await apiPost(`${API}/${uid}/threads`, {media_type:'VIDEO', video_url:post.media_url, text, access_token:acc.token});
       containerId = res.id;
       for(let i=0; i<20; i++){
         await new Promise(r=>setTimeout(r,3000));
@@ -1134,8 +1119,8 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
         if(s.status==='FINISHED') break;
         if(s.status==='ERROR') throw new Error(s.error_message||'영상 처리 실패');
       }
-    } else if(mt==='CAROUSEL_ALBUM' && freshPost._children?.length){
-      const chs = freshPost._children;
+    } else if(mt==='CAROUSEL_ALBUM' && post._children?.length){
+      const chs = post._children;
       const childIds = [];
       for(let i=0; i<chs.length; i++){
         statusEl.textContent = `미디어 ${i+1}/${chs.length} 업로드 중...`;
