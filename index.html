@@ -1672,21 +1672,10 @@ async function dlMedia(url, filename, btn){
     return;
   }
 
-  // 2. blob 실패 → iOS 영상: 버튼 주변 video 요소로 webkitEnterFullscreen
-  if(isVideo && isIOS){
-    const v = btn
-      ? btn.closest('.card-actions, div')?.closest('.post-card, div')?.querySelector('video')
-        ?? btn.closest('div')?.parentElement?.querySelector('video')
-      : null;
-    if(v?.webkitEnterFullscreen){
-      v.play().catch(()=>{});
-      v.webkitEnterFullscreen();
-      return;
-    }
-  }
-
-  window.open(url, '_blank');
-  toast('새 탭에서 직접 저장해주세요');
+  // 2. blob 실패 → media-proxy URL을 Safari에서 직접 열기
+  // Content-Disposition: attachment 헤더로 iOS가 파일 저장 제안
+  window.open(MEDIA_PROXY + encodeURIComponent(url), '_blank');
+  toast('파일 저장 화면이 열립니다');
 }
 
 // ═══════════════════════════════════════════════
