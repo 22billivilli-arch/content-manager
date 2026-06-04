@@ -1630,42 +1630,47 @@ function getMediaList(post, children){
   return [];
 }
 
-async function dlMedia(url, filename){
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if(isIOS && navigator.canShare){
+async function _fetchBlob(url){
+  // 직접 fetch 먼저 (publishing과 동일 방식), 실패시 proxy
+  for(const target of [url, PROXY + encodeURIComponent(url)]){
     try{
-      toast('다운로드 중...', true);
-      const r = await fetch(PROXY + encodeURIComponent(url));
-      const b = await r.blob();
-      const file = new File([b], filename, {type: b.type});
-      if(navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title: filename});
-        return;
-      }
-    } catch(e){
-      if(e.name !== 'AbortError'){
-        window.open(url,'_blank');
-        toast('새 탭에서 열림 — 직접 저장해주세요');
-      }
-      return;
-    }
+      const r = await fetch(target);
+      if(r.ok) return await r.blob();
+    } catch(e){}
   }
-  try{
-    toast('다운로드 중...', true);
-    const r = await fetch(PROXY + encodeURIComponent(url));
-    if(!r.ok) throw new Error(`HTTP ${r.status}`);
-    const b = await r.blob();
+  return null;
+}
+
+async function dlMedia(url, filename){
+  toast('다운로드 중...', true);
+  const isVideo = filename.endsWith('.mp4');
+  const mime    = isVideo ? 'video/mp4' : 'image/jpeg';
+  const blob    = await _fetchBlob(url);
+  if(blob){
+    const file = new File([blob], filename, {type: mime});
+    // iOS: Share API → "비디오 저장" / "이미지 저장"
+    if(/iPhone|iPad|iPod/i.test(navigator.userAgent) && navigator.canShare?.({files:[file]})){
+      try{ await navigator.share({files:[file], title: filename}); return; }
+      catch(e){ if(e.name==='AbortError') return; }
+    }
+    // 데스크톱: blob 다운로드
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(b);
+    a.href = URL.createObjectURL(file);
     a.download = filename;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
     toast('다운로드 완료 ✓', true);
-  } catch(e){
-    window.open(url,'_blank');
-    toast('새 탭에서 열림 — 직접 저장해주세요');
+    return;
   }
+  // blob 취득 실패 시 → iOS 영상은 webkitEnterFullscreen으로 네이티브 저장 유도
+  if(isVideo && /iPhone|iPad|iPod/i.test(navigator.userAgent)){
+    toast('네이티브 플레이어에서 공유 → 비디오 저장을 눌러주세요');
+    const v = document.querySelector(`video[src="${url}"], video[src^="${url.slice(0,60)}"]`);
+    if(v){ v.play().catch(()=>{}); v.webkitEnterFullscreen?.(); return; }
+  }
+  window.open(url,'_blank');
+  toast('새 탭에서 직접 저장해주세요');
 }
 
 // ═══════════════════════════════════════════════
@@ -1948,34 +1953,11 @@ function renderVideoTab(){
 
   const q = id => fw.querySelector('#' + id);
 
-  // CORS 프록시 경유 blob 다운로드
   async function dlItem(rawUrl, fname, btn){
     const orig = btn.textContent;
     btn.disabled = true; btn.textContent = '다운로드 중...';
-    try{
-      const r = await fetch(PROXY + encodeURIComponent(rawUrl));
-      if(!r.ok) throw new Error(`HTTP ${r.status}`);
-      const b = await r.blob();
-      if(/iPhone|iPad|iPod/i.test(navigator.userAgent) && navigator.canShare){
-        const file = new File([b], fname, {type: b.type});
-        if(navigator.canShare({files:[file]})){
-          await navigator.share({files:[file], title: fname});
-          return;
-        }
-      }
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(b);
-      a.download = fname;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
-      toast('다운로드 완료 ✓', true);
-    } catch(e){
-      window.open(rawUrl, '_blank');
-      toast('새 탭에서 직접 저장해주세요');
-    } finally{
-      btn.disabled = false; btn.textContent = orig;
-    }
+    try{ await dlMedia(rawUrl, fname); }
+    finally{ btn.disabled = false; btn.textContent = orig; }
   }
 
   q('_vdClearBtn').onclick = () => {
