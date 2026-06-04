@@ -8,6 +8,7 @@
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <style>
 :root {
   --bg:     #0f0f0f;
@@ -1134,83 +1135,79 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
     let containerId;
 
     if(mt==='IMAGE'){
-      statusEl.textContent = '미디어 URL 갱신 중...';
-      const freshUrl = (post.id ? await refreshPostMedia(post.id, srcToken) : null) || post.media_url;
-      if(!freshUrl) throw new Error('이미지 URL을 가져올 수 없습니다');
+      const cdnUrl = (post.id ? await refreshPostMedia(post.id, srcToken) : null) || post.media_url;
+      if(!cdnUrl) throw new Error('이미지 URL을 가져올 수 없습니다');
+      const {url: imgUrl, ref: imgRef} = await uploadMediaToStorage(cdnUrl, statusEl);
       statusEl.textContent = '이미지 컨테이너 생성 중...';
-      const params = {media_type:'IMAGE', image_url:freshUrl, access_token:acc.token};
+      const params = {media_type:'IMAGE', image_url:imgUrl, access_token:acc.token};
       if(text) params.text = text;
-      const res = await apiPost(`${API}/${uid}/threads`, params);
-      containerId = res.id;
+      let imgRes;
+      try{ imgRes = await apiPost(`${API}/${uid}/threads`, params); }
+      finally{ deleteStorageRef(imgRef); }
+      containerId = imgRes.id;
     } else if(mt==='VIDEO'){
-      statusEl.textContent = '미디어 URL 갱신 중...';
-      const freshUrl = (post.id ? await refreshPostMedia(post.id, srcToken) : null) || post.media_url;
-      if(!freshUrl) throw new Error('영상 URL을 가져올 수 없습니다');
-      console.log('[발행] VIDEO freshUrl:', freshUrl?.slice(0,80), '(fresh API?', !!(post.id && await refreshPostMedia(post.id, srcToken)), ')');
+      const cdnUrl = (post.id ? await refreshPostMedia(post.id, srcToken) : null) || post.media_url;
+      if(!cdnUrl) throw new Error('영상 URL을 가져올 수 없습니다');
+      const {url: vidUrl, ref: vidRef} = await uploadMediaToStorage(cdnUrl, statusEl);
       statusEl.textContent = '영상 업로드 중...';
-      const params = {media_type:'VIDEO', video_url:freshUrl, access_token:acc.token};
+      const params = {media_type:'VIDEO', video_url:vidUrl, access_token:acc.token};
       if(text) params.text = text;
       let res;
       try{ res = await apiPost(`${API}/${uid}/threads`, params); }
-      catch(err){ throw new Error(`영상 컨테이너 생성 실패: ${err.message}`); }
+      catch(err){ deleteStorageRef(vidRef); throw new Error(`영상 컨테이너 생성 실패: ${err.message}`); }
       containerId = res.id;
-      console.log('[발행] VIDEO containerId:', containerId);
       for(let i=0; i<20; i++){
         await new Promise(r=>setTimeout(r,3000));
         let s;
         try{ s = await apiFetch(`${API}/${containerId}?fields=status,error_message&access_token=${acc.token}`); }
-        catch(err){ throw new Error(`영상 상태확인 실패: ${err.message}`); }
-        console.log('[발행] VIDEO 상태:', s?.status, s?.error_message||'');
-        statusEl.textContent = `영상 인코딩 중... (${(i+1)*3}s) [${s?.status||'?'}]`;
-        if(s.status==='FINISHED') break;
-        if(s.status==='ERROR') throw new Error(`영상 처리 실패 (${s.error_message||'UNKNOWN'}) - CDN URL이 만료됐거나 외부 접근이 차단된 URL입니다`);
+        catch(err){ deleteStorageRef(vidRef); throw new Error(`영상 상태확인 실패: ${err.message}`); }
+        statusEl.textContent = `영상 인코딩 중... (${(i+1)*3}s)`;
+        if(s.status==='FINISHED'){ deleteStorageRef(vidRef); break; }
+        if(s.status==='ERROR'){ deleteStorageRef(vidRef); throw new Error(`영상 처리 실패: ${s.error_message||'UNKNOWN'}`); }
       }
     } else if(mt==='CAROUSEL_ALBUM'){
-      statusEl.textContent = '미디어 URL 갱신 중...';
       const freshChildrenFromApi = post.id ? await refreshChildren(post.id, srcToken) : null;
-      console.log('[발행] refreshChildren 결과:', freshChildrenFromApi ? `${freshChildrenFromApi.length}개` : 'null(저장본 사용)');
       const freshChildren = freshChildrenFromApi || post._children;
       if(!freshChildren?.length) throw new Error('캐러셀 미디어를 가져올 수 없습니다');
       const childIds = [];
+      const storageRefs = [];
       for(let i=0; i<freshChildren.length; i++){
-        statusEl.textContent = `미디어 ${i+1}/${freshChildren.length} 업로드 중...`;
         const c = freshChildren[i];
         if(!c.media_url) throw new Error(`미디어 ${i+1} URL 없음`);
         const isVid = c.media_type==='VIDEO';
-        console.log(`[발행] child ${i+1} 업로드 - type:${c.media_type} url:${c.media_url?.slice(0,80)}`);
+        const {url: childUrl, ref: childRef} = await uploadMediaToStorage(c.media_url, statusEl);
+        storageRefs.push(childRef);
+        statusEl.textContent = `미디어 ${i+1}/${freshChildren.length} 컨테이너 생성 중...`;
         let r;
         try{
           r = await apiPost(`${API}/${uid}/threads`, {
             media_type: isVid?'VIDEO':'IMAGE',
-            [isVid?'video_url':'image_url']: c.media_url,
+            [isVid?'video_url':'image_url']: childUrl,
             is_carousel_item:'true',
             access_token:acc.token
           });
         } catch(err){
+          storageRefs.forEach(deleteStorageRef);
           throw new Error(`미디어 ${i+1}(${c.media_type}) 업로드 실패: ${err.message}`);
         }
-        console.log(`[발행] child ${i+1} 컨테이너:`, r);
-        if(!r.id) throw new Error(`미디어 ${i+1} 컨테이너 생성 실패 (응답: ${JSON.stringify(r)})`);
+        if(!r.id){ storageRefs.forEach(deleteStorageRef); throw new Error(`미디어 ${i+1} 컨테이너 생성 실패`); }
         if(isVid){
           for(let j=0; j<30; j++){
             await new Promise(res=>setTimeout(res,3000));
             let s;
-            try{
-              s = await apiFetch(`${API}/${r.id}?fields=status,error_message&access_token=${acc.token}`);
-            } catch(err){
-              throw new Error(`영상 ${i+1} 상태확인 실패: ${err.message}`);
-            }
-            console.log(`[발행] child ${i+1} 상태:`, s?.status, s?.error_message||'');
-            statusEl.textContent = `영상 ${i+1} 인코딩 중... (${(j+1)*3}s) [${s?.status||'?'}]`;
+            try{ s = await apiFetch(`${API}/${r.id}?fields=status,error_message&access_token=${acc.token}`); }
+            catch(err){ storageRefs.forEach(deleteStorageRef); throw new Error(`영상 ${i+1} 상태확인 실패: ${err.message}`); }
+            statusEl.textContent = `영상 ${i+1} 인코딩 중... (${(j+1)*3}s)`;
             if(s.status==='FINISHED') break;
-            if(s.status==='ERROR') throw new Error(s.error_message||`영상 ${i+1} 처리 실패`);
-            if(j===29) throw new Error(`영상 ${i+1} 인코딩 타임아웃`);
+            if(s.status==='ERROR'){ storageRefs.forEach(deleteStorageRef); throw new Error(`영상 ${i+1} 처리 실패: ${s.error_message}`); }
+            if(j===29){ storageRefs.forEach(deleteStorageRef); throw new Error(`영상 ${i+1} 인코딩 타임아웃`); }
           }
         }
         childIds.push(r.id);
       }
       statusEl.textContent = '캐러셀 생성 중...';
       const res = await apiPost(`${API}/${uid}/threads`, {media_type:'CAROUSEL', children:childIds.join(','), text, access_token:acc.token});
+      storageRefs.forEach(deleteStorageRef);
       containerId = res.id;
     } else {
       if(!text) throw new Error('텍스트 내용이 없습니다');
@@ -2082,14 +2079,37 @@ const FB_CONFIG = {
 };
 
 let fbDb         = null;
+let fbStorage    = null;
 let syncDebounce = null;
 
 function initFirebase(){
   try{
     if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
-    fbDb = firebase.firestore();
+    fbDb      = firebase.firestore();
+    fbStorage = firebase.storage();
     return true;
-  } catch(e){ console.warn('Firebase init:', e); fbDb = null; return false; }
+  } catch(e){ console.warn('Firebase init:', e); fbDb = null; fbStorage = null; return false; }
+}
+
+// 미디어를 Firebase Storage에 임시 업로드하고 공개 URL 반환
+async function uploadMediaToStorage(cdnUrl, statusEl){
+  if(!fbStorage) throw new Error('Firebase Storage 미초기화');
+  statusEl.textContent = '미디어 다운로드 중...';
+  const res = await fetch(cdnUrl);
+  if(!res.ok) throw new Error(`미디어 다운로드 실패 (${res.status})`);
+  const blob = await res.blob();
+  const ext  = blob.type.includes('video') ? 'mp4' : 'jpg';
+  const path = `temp-publish/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  statusEl.textContent = '임시 업로드 중...';
+  const ref = fbStorage.ref(path);
+  await ref.put(blob, {contentType: blob.type});
+  const url = await ref.getDownloadURL();
+  return {url, ref};
+}
+
+// 업로드한 임시 파일 삭제
+async function deleteStorageRef(ref){
+  try{ await ref.delete(); } catch(e){ console.warn('Storage 임시파일 삭제 실패:', e); }
 }
 
 async function cloudLoad(){
