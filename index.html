@@ -1098,11 +1098,17 @@ async function refreshPostMedia(postId, token){
   } catch(e){ return null; }
 }
 
-async function refreshChildren(postId, token){
-  try{
-    const d = await apiFetch(`${API}/${postId}/children?fields=id,media_type,media_url&access_token=${token}`);
-    return d.data || [];
-  } catch(e){ return null; }
+async function refreshChildren(postId, preferToken){
+  // 모든 유효 토큰 순서대로 시도 (CORS 프록시가 특정 토큰에서 실패할 수 있음)
+  const tokens = [preferToken, ...FEED_ACCOUNTS.map(a=>a.token)].filter(Boolean);
+  const unique = [...new Set(tokens)];
+  for(const token of unique){
+    try{
+      const d = await apiFetch(`${API}/${postId}/children?fields=id,media_type,media_url&access_token=${token}`);
+      if(d.data?.length) return d.data;
+    } catch(e){}
+  }
+  return null;
 }
 
 // 원본 계정 토큰 조회 (media_url은 본인 계정 토큰으로만 갱신 가능)
@@ -1162,12 +1168,18 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
         const c = freshChildren[i];
         if(!c.media_url) throw new Error(`미디어 ${i+1} URL 없음`);
         const isVid = c.media_type==='VIDEO';
-        const r = await apiPost(`${API}/${uid}/threads`, {
-          media_type: isVid?'VIDEO':'IMAGE',
-          [isVid?'video_url':'image_url']: c.media_url,
-          is_carousel_item:'true',
-          access_token:acc.token
-        });
+        console.log(`[발행] child ${i+1} 업로드 - type:${c.media_type} url:${c.media_url?.slice(0,60)}`);
+        let r;
+        try{
+          r = await apiPost(`${API}/${uid}/threads`, {
+            media_type: isVid?'VIDEO':'IMAGE',
+            [isVid?'video_url':'image_url']: c.media_url,
+            is_carousel_item:'true',
+            access_token:acc.token
+          });
+        } catch(err){
+          throw new Error(`미디어 ${i+1}(${c.media_type}) 업로드 실패: ${err.message}`);
+        }
         if(!r.id) throw new Error(`미디어 ${i+1} 컨테이너 생성 실패`);
         if(isVid){
           for(let j=0; j<30; j++){
