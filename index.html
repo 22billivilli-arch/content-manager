@@ -1117,11 +1117,14 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
   statusEl.style.color = 'var(--text2)';
   try{
     statusEl.textContent = '계정 확인 중...';
+    console.log('[발행] 시작 - accIdx:', accIdx, 'acc.name:', acc.name, 'post.media_type:', post.media_type, 'post._acc_name:', post._acc_name);
     const me = await apiFetch(`${API}/me?fields=id&access_token=${acc.token}`);
+    console.log('[발행] me:', me);
     const uid = me.id;
     const text = post.text||'';
     const mt = post.media_type;
     const srcToken = getSrcToken(post, acc.token);
+    console.log('[발행] mt:', mt, 'srcToken 존재:', !!srcToken, 'post.id:', post.id);
     let containerId;
 
     if(mt==='IMAGE'){
@@ -1203,6 +1206,7 @@ async function publishPost(post, accIdx, statusEl, publishBtn){
     }
 
   } catch(e){
+    console.error('[발행] 오류:', e);
     statusEl.textContent = '오류: '+(e.message||String(e));
     statusEl.style.color = 'var(--danger)';
     publishBtn.disabled = false;
