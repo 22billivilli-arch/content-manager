@@ -1499,7 +1499,7 @@ function makeCard(post, children){
     const isVid = item.type==='VIDEO';
     btn.innerHTML = isVid ? '⬇️ 영상' : '⬇️ 이미지';
     if(arr.length>1) btn.innerHTML += ` ${i+1}`;
-    btn.onclick = () => dlMedia(item.url, `threads_${post.id}_${i+1}.${isVid?'mp4':'jpg'}`);
+    btn.onclick = () => dlMedia(item.url, `threads_${post.id}_${i+1}.${isVid?'mp4':'jpg'}`, btn);
     acts.appendChild(btn);
   });
 
@@ -1641,19 +1641,21 @@ async function _fetchBlob(url){
   return null;
 }
 
-async function dlMedia(url, filename){
+// btn: 버튼 요소 (video element 탐색용, 선택적)
+async function dlMedia(url, filename, btn){
   toast('다운로드 중...', true);
   const isVideo = filename.endsWith('.mp4');
   const mime    = isVideo ? 'video/mp4' : 'image/jpeg';
-  const blob    = await _fetchBlob(url);
+  const isIOS   = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // 1. blob 취득 시도 (직접 → proxy 순)
+  const blob = await _fetchBlob(url);
   if(blob){
     const file = new File([blob], filename, {type: mime});
-    // iOS: Share API → "비디오 저장" / "이미지 저장"
-    if(/iPhone|iPad|iPod/i.test(navigator.userAgent) && navigator.canShare?.({files:[file]})){
+    if(isIOS && navigator.canShare?.({files:[file]})){
       try{ await navigator.share({files:[file], title: filename}); return; }
       catch(e){ if(e.name==='AbortError') return; }
     }
-    // 데스크톱: blob 다운로드
     const a = document.createElement('a');
     a.href = URL.createObjectURL(file);
     a.download = filename;
@@ -1663,13 +1665,21 @@ async function dlMedia(url, filename){
     toast('다운로드 완료 ✓', true);
     return;
   }
-  // blob 취득 실패 시 → iOS 영상은 webkitEnterFullscreen으로 네이티브 저장 유도
-  if(isVideo && /iPhone|iPad|iPod/i.test(navigator.userAgent)){
-    toast('네이티브 플레이어에서 공유 → 비디오 저장을 눌러주세요');
-    const v = document.querySelector(`video[src="${url}"], video[src^="${url.slice(0,60)}"]`);
-    if(v){ v.play().catch(()=>{}); v.webkitEnterFullscreen?.(); return; }
+
+  // 2. blob 실패 → iOS 영상: 버튼 주변 video 요소로 webkitEnterFullscreen
+  if(isVideo && isIOS){
+    const v = btn
+      ? btn.closest('.card-actions, div')?.closest('.post-card, div')?.querySelector('video')
+        ?? btn.closest('div')?.parentElement?.querySelector('video')
+      : null;
+    if(v?.webkitEnterFullscreen){
+      v.play().catch(()=>{});
+      v.webkitEnterFullscreen();
+      return;
+    }
   }
-  window.open(url,'_blank');
+
+  window.open(url, '_blank');
   toast('새 탭에서 직접 저장해주세요');
 }
 
@@ -1956,7 +1966,7 @@ function renderVideoTab(){
   async function dlItem(rawUrl, fname, btn){
     const orig = btn.textContent;
     btn.disabled = true; btn.textContent = '다운로드 중...';
-    try{ await dlMedia(rawUrl, fname); }
+    try{ await dlMedia(rawUrl, fname, btn); }
     finally{ btn.disabled = false; btn.textContent = orig; }
   }
 
