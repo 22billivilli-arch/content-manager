@@ -2052,6 +2052,92 @@ function renderVideoTab(){
       btn.disabled = false; btn.innerHTML = '미디어 가져오기';
     }
   };
+
+  // ── 틱톡 섹션 ──────────────────────────────────
+  const ttWrap = document.createElement('div');
+  ttWrap.className = 'cp-tab-wrap';
+  ttWrap.style.marginTop = '24px';
+  ttWrap.innerHTML = `
+    <div class="cp-head-row">
+      <span class="cp-head-title">🎵 TikTok 영상 다운로드</span>
+    </div>
+    <div>
+      <div class="cp-label">TikTok URL</div>
+      <input class="cp-input" id="_ttUrl" type="text"
+        placeholder="https://www.tiktok.com/@username/video/..."
+        style="width:100%;font-size:13px;">
+      <button class="cp-btn" id="_ttFetchBtn" style="margin-top:10px;">영상 가져오기</button>
+      <button class="cp-btn" id="_ttClearBtn" style="margin-top:8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border2);">URL 지우기</button>
+    </div>
+    <div id="_ttResult" style="display:none;margin-top:16px;"></div>
+    <div id="_ttErr" style="display:none;margin-top:12px;" class="cp-result err"></div>
+  `;
+  fw.querySelector('.cp-tab-wrap').after(ttWrap);
+
+  const qq = id => ttWrap.querySelector('#' + id);
+
+  qq('_ttClearBtn').onclick = () => {
+    qq('_ttUrl').value = '';
+    qq('_ttResult').style.display = 'none';
+    qq('_ttResult').innerHTML = '';
+    qq('_ttErr').style.display = 'none';
+    qq('_ttUrl').focus();
+  };
+
+  qq('_ttFetchBtn').onclick = async () => {
+    const inputUrl = qq('_ttUrl').value.trim();
+    if(!inputUrl){ toast('TikTok URL을 입력해주세요'); return; }
+    const btn = qq('_ttFetchBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 분석 중...';
+    qq('_ttResult').style.display = 'none';
+    qq('_ttResult').innerHTML = '';
+    qq('_ttErr').style.display = 'none';
+    try{
+      const apiUrl = `https://tikwm.com/api/?url=${encodeURIComponent(inputUrl)}&hd=1`;
+      const r = await fetch(apiUrl, {signal: AbortSignal.timeout(15000)});
+      if(!r.ok) throw new Error('API 응답 오류 ' + r.status);
+      const j = await r.json();
+      if(j.code !== 0 || !j.data) throw new Error(j.msg || '영상 정보를 가져올 수 없습니다');
+
+      const d = j.data;
+      const videoUrl = d.play || d.wmplay || '';
+      const cover    = d.cover || '';
+      const title    = d.title || '';
+      const author   = (d.author && d.author.nickname) || '';
+      if(!videoUrl) throw new Error('영상 URL을 찾을 수 없습니다');
+
+      const ts = Date.now();
+      const fname = `tiktok_${ts}.mp4`;
+      const container = qq('_ttResult');
+      container.innerHTML = `
+        <div style="border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:8px;">
+          <div style="padding:7px 12px;background:var(--bg3);font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
+            🎵 ${author ? '@'+author : 'TikTok'} ${title ? '· '+title.slice(0,40) : ''}
+          </div>
+          <video src="${MEDIA_PROXY + encodeURIComponent(videoUrl)}" controls playsinline
+            style="width:100%;max-height:480px;background:#000;display:block;"
+            poster="${cover}"></video>
+          <div style="padding:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="cp-btn" id="_ttDlBtn" style="margin:0;font-size:13px;">📥 영상 저장 (워터마크 없음)</button>
+          </div>
+        </div>`;
+      container.style.display = 'block';
+
+      container.querySelector('#_ttDlBtn').onclick = async function(){
+        const origTxt = this.textContent;
+        this.disabled = true; this.textContent = '다운로드 중...';
+        try{ await dlMedia(videoUrl, fname, this); }
+        finally{ this.disabled = false; this.textContent = origTxt; }
+      };
+
+      toast('TikTok 영상 발견', true);
+    } catch(e){
+      qq('_ttErr').style.display = 'block';
+      qq('_ttErr').textContent = '오류: ' + e.message;
+    } finally {
+      btn.disabled = false; btn.innerHTML = '영상 가져오기';
+    }
+  };
 }
 
 // ═══════════════════════════════════════════════
@@ -2080,9 +2166,8 @@ function initFirebase(){
 // CDN URL → transfer.sh 임시 업로드 → 공개 URL 반환 (24시간 후 자동 삭제)
 async function uploadMediaToTempHost(cdnUrl, statusEl){
   statusEl.textContent = '미디어 다운로드 중...';
-  const res = await fetch(cdnUrl);
-  if(!res.ok) throw new Error(`미디어 다운로드 실패 (${res.status})`);
-  const blob = await res.blob();
+  const blob = await _fetchBlob(cdnUrl);  // MEDIA_PROXY 경유 (CORS 우회)
+  if(!blob) throw new Error('미디어 다운로드 실패 — CDN 접근 불가');
   const ext = blob.type.includes('video') ? 'mp4' : 'jpg';
   statusEl.textContent = '임시 업로드 중...';
   const uploadRes = await fetch(`https://transfer.sh/media.${ext}`, {
