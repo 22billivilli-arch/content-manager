@@ -2375,14 +2375,16 @@ document.getElementById('syncPullBtn').onclick = async () => {
 (function(){
   const WORK_SEC = 20 * 60;
   const REST_SEC = 10 * 60;
-  const CIRCUMFERENCE = 2 * Math.PI * 68;  // r=68
+  const CIRCUMFERENCE = 2 * Math.PI * 68;
+  const LS_KEY = 'pomo_state';
 
-  let totalSec  = WORK_SEC;
-  let leftSec   = WORK_SEC;
-  let isWork    = true;
-  let running   = false;
-  let ticker    = null;
-  let wakeLock  = null;
+  let totalSec = WORK_SEC;
+  let leftSec  = WORK_SEC;
+  let isWork   = true;
+  let running  = false;
+  let endTime  = null;   // Date.now() + 남은ms — 백그라운드 기준점
+  let ticker   = null;
+  let wakeLock = null;
 
   const overlay   = document.getElementById('pomoOverlay');
   const label     = document.getElementById('pomoLabel');
@@ -2394,15 +2396,22 @@ document.getElementById('syncPullBtn').onclick = async () => {
   const workBtn   = document.getElementById('btnTimerWork');
   const restBtn   = document.getElementById('btnTimerRest');
 
+  // ── 상태 저장 / 복원 ──────────────────────────────
+  function saveState(){
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      isWork, totalSec, endTime, running
+    }));
+  }
+  function clearState(){ localStorage.removeItem(LS_KEY); }
+
   function fmt(s){
     const m = String(Math.floor(s / 60)).padStart(2,'0');
-    const sec = String(s % 60).padStart(2,'0');
-    return `${m}:${sec}`;
+    const sc = String(s % 60).padStart(2,'0');
+    return `${m}:${sc}`;
   }
 
   function setRing(left, total){
-    const ratio = left / total;
-    const offset = CIRCUMFERENCE * (1 - ratio);
+    const offset = CIRCUMFERENCE * (1 - left / total);
     progress.style.strokeDasharray  = CIRCUMFERENCE;
     progress.style.strokeDashoffset = offset;
     progress.style.stroke = isWork ? '#ff5555' : '#00d4aa';
@@ -2412,102 +2421,144 @@ document.getElementById('syncPullBtn').onclick = async () => {
     timeText.textContent = fmt(leftSec);
     setRing(leftSec, totalSec);
     toggleBtn.textContent = running ? '일시정지' : (leftSec < totalSec ? '재개' : '시작');
-    if(isWork){
-      label.textContent = '🍅 집중 시간';
-      timeSub.textContent = running ? '집중하세요!' : '20분 집중';
-    } else {
-      label.textContent = '☕ 휴식 시간';
-      timeSub.textContent = running ? '잠깐 쉬세요~' : '10분 휴식';
-    }
-    // 헤더 버튼 상태
-    workBtn.className = 'btn-timer' + (isWork && running ? ' work-active' : '');
+    label.textContent   = isWork ? '🍅 집중 시간' : '☕ 휴식 시간';
+    timeSub.textContent = running
+      ? (isWork ? '집중하세요!' : '잠깐 쉬세요~')
+      : (isWork ? '20분 집중'   : '10분 휴식');
+    workBtn.className = 'btn-timer' + (isWork  && running ? ' work-active' : '');
     restBtn.className = 'btn-timer' + (!isWork && running ? ' rest-active' : '');
   }
 
-  function stop(){
-    clearInterval(ticker); ticker = null; running = false;
-    if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock = null; }
-  }
-
-  function done(){
-    stop();
-    // 진동 알림
-    if(navigator.vibrate) navigator.vibrate([300,100,300,100,300]);
-    // 소리 알림
+  // ── 알림 (진동 + 소리) ───────────────────────────
+  function notify(){
+    // 진동 (Android / 일부 iOS)
+    if(navigator.vibrate) navigator.vibrate([400,150,400,150,600]);
+    // Web Audio 알림음
     try{
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      [0,0.3,0.6].forEach(t => {
+      [[0,.3],[0.4,.3],[0.8,.5]].forEach(([t, dur]) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
         o.frequency.value = isWork ? 880 : 660;
-        g.gain.setValueAtTime(0.3, ctx.currentTime + t);
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.25);
+        g.gain.setValueAtTime(0, ctx.currentTime + t);
+        g.gain.linearRampToValueAtTime(0.4, ctx.currentTime + t + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + dur);
         o.start(ctx.currentTime + t);
-        o.stop(ctx.currentTime + t + 0.25);
+        o.stop(ctx.currentTime + t + dur + 0.05);
       });
     } catch(e){}
-    toast(isWork ? '⏰ 집중 완료! 휴식하세요' : '✅ 휴식 완료! 다시 집중해볼까요?', true);
+  }
+
+  // ── 타이머 완료 ──────────────────────────────────
+  function done(){
+    stopTick();
+    clearState();
+    notify();
+    overlay.classList.add('open');   // 백그라운드에서 돌아왔을 때 자동으로 열기
+    toast(isWork ? '⏰ 집중 완료! 휴식하세요 ☕' : '✅ 휴식 완료! 다시 집중해볼까요? 🍅', true);
     render();
+  }
+
+  // ── tick (Date 기반 — 백그라운드 복귀 시 정확) ──
+  function tick(){
+    if(!endTime){ stopTick(); return; }
+    const ms = endTime - Date.now();
+    if(ms <= 0){ leftSec = 0; done(); return; }
+    leftSec = Math.ceil(ms / 1000);
+    render();
+  }
+
+  function stopTick(){
+    clearInterval(ticker); ticker = null;
+    running = false; endTime = null;
+    if(wakeLock){ wakeLock.release().catch(()=>{}); wakeLock = null; }
   }
 
   async function startTick(){
     running = true;
-    // Screen Wake Lock (화면 꺼짐 방지)
+    endTime = Date.now() + leftSec * 1000;
+    saveState();
     if('wakeLock' in navigator){
       try{ wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
     }
-    ticker = setInterval(() => {
-      leftSec--;
-      if(leftSec <= 0){ leftSec = 0; done(); }
-      render();
-    }, 1000);
-  }
-
-  function setup(work){
-    stop();
-    isWork   = work;
-    totalSec = work ? WORK_SEC : REST_SEC;
-    leftSec  = totalSec;
+    clearInterval(ticker);
+    ticker = setInterval(tick, 500);  // 500ms마다 — Date 기반이라 오차 없음
     render();
   }
 
-  // 버튼 이벤트
+  // ── 백그라운드 복귀 감지 ─────────────────────────
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden || !running || !endTime) return;
+    // 화면 복귀 시 남은 시간 재계산
+    const ms = endTime - Date.now();
+    if(ms <= 0){ leftSec = 0; done(); }
+    else { leftSec = Math.ceil(ms / 1000); render(); }
+  });
+
+  // ── 페이지 로드 시 진행 중 상태 복원 ────────────
+  (function restoreState(){
+    try{
+      const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+      if(!s || !s.running || !s.endTime) return;
+      isWork   = s.isWork;
+      totalSec = s.totalSec;
+      endTime  = s.endTime;
+      const ms = endTime - Date.now();
+      if(ms <= 0){
+        // 페이지 닫혀있는 동안 끝난 경우
+        leftSec = 0;
+        running = false;
+        clearState();
+        notify();
+        toast(isWork ? '⏰ 집중 타이머가 종료됐습니다!' : '✅ 휴식 타이머가 종료됐습니다!', true);
+      } else {
+        leftSec = Math.ceil(ms / 1000);
+        running = true;
+        ticker  = setInterval(tick, 500);
+        overlay.classList.add('open');
+        toast('⏱ 타이머가 계속 진행 중입니다', true);
+      }
+      render();
+    } catch(e){}
+  })();
+
+  // ── setup ────────────────────────────────────────
+  function setup(work){
+    stopTick(); clearState();
+    isWork = work; totalSec = work ? WORK_SEC : REST_SEC; leftSec = totalSec;
+    render();
+  }
+
+  // ── 버튼 이벤트 ─────────────────────────────────
   workBtn.onclick = () => { setup(true);  overlay.classList.add('open'); };
   restBtn.onclick = () => { setup(false); overlay.classList.add('open'); };
 
   toggleBtn.onclick = () => {
-    if(running){ stop(); render(); }
-    else { startTick(); render(); }
+    if(running){ stopTick(); clearState(); render(); }
+    else startTick();
   };
 
   resetBtn.onclick = () => {
-    stop();
+    stopTick(); clearState();
     leftSec = totalSec;
     render();
   };
 
-  document.getElementById('pomoClose').onclick = () => {
-    overlay.classList.remove('open');
-  };
-  overlay.onclick = e => {
-    if(e.target === overlay) overlay.classList.remove('open');
-  };
+  document.getElementById('pomoClose').onclick = () => overlay.classList.remove('open');
+  overlay.onclick = e => { if(e.target === overlay) overlay.classList.remove('open'); };
 
-  // 시계 앱 열기 (clock-timer:// URL스킴 — iOS 시계 앱 타이머 탭)
   document.getElementById('pomoSysTimer').onclick = () => {
     window.location.href = 'clock-timer://';
-    setTimeout(() => toast('시계 앱이 열리지 않으면 직접 타이머를 설정해주세요'), 1200);
+    setTimeout(() => toast('시계 앱이 열리지 않으면 직접 설정해주세요'), 1200);
   };
 
-  // 시리 명령어 복사
   document.getElementById('pomoSiri').onclick = () => {
     const cmd = isWork ? '20분 타이머 설정해줘' : '10분 타이머 설정해줘';
-    navigator.clipboard.writeText(cmd).then(() => {
-      toast(`"${cmd}" 복사됨 — 시리에게 붙여넣거나 직접 말해보세요 🎙`, true);
-    }).catch(() => {
-      toast(`시리에게 말하세요: "${cmd}"`);
-    });
+    navigator.clipboard.writeText(cmd)
+      .then(() => toast(`"${cmd}" 복사됨 🎙`, true))
+      .catch(() => toast(`시리에게 말하세요: "${cmd}"`));
   };
 
   render();
