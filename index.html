@@ -629,6 +629,16 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
       <button class="pomo-btn start" id="pomoToggle">시작</button>
       <button class="pomo-btn reset" id="pomoReset">초기화</button>
     </div>
+    <div style="margin-top:14px;display:flex;gap:8px;">
+      <button class="pomo-btn" id="pomoSysTimer"
+        style="background:var(--bg4);color:var(--text2);border:1px solid var(--border2);font-size:12px;">
+        📱 시계 앱 열기
+      </button>
+      <button class="pomo-btn" id="pomoSiri"
+        style="background:var(--bg4);color:var(--text2);border:1px solid var(--border2);font-size:12px;">
+        🎙 시리 명령어 복사
+      </button>
+    </div>
   </div>
 </div>
 
@@ -2482,6 +2492,22 @@ document.getElementById('syncPullBtn').onclick = async () => {
   };
   overlay.onclick = e => {
     if(e.target === overlay) overlay.classList.remove('open');
+  };
+
+  // 시계 앱 열기 (clock-timer:// URL스킴 — iOS 시계 앱 타이머 탭)
+  document.getElementById('pomoSysTimer').onclick = () => {
+    window.location.href = 'clock-timer://';
+    setTimeout(() => toast('시계 앱이 열리지 않으면 직접 타이머를 설정해주세요'), 1200);
+  };
+
+  // 시리 명령어 복사
+  document.getElementById('pomoSiri').onclick = () => {
+    const cmd = isWork ? '20분 타이머 설정해줘' : '10분 타이머 설정해줘';
+    navigator.clipboard.writeText(cmd).then(() => {
+      toast(`"${cmd}" 복사됨 — 시리에게 붙여넣거나 직접 말해보세요 🎙`, true);
+    }).catch(() => {
+      toast(`시리에게 말하세요: "${cmd}"`);
+    });
   };
 
   render();
