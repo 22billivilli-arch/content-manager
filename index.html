@@ -351,6 +351,8 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 .cmv-card-more{background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;font-family:inherit;padding:0 13px 6px;}
 .cmv-card-pub{padding:9px 13px;border-top:1px solid var(--border);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
 .cmv-card-meta{padding:4px 13px;font-size:10px;color:var(--text3);}
+.cmv-edit-btn{background:none;border:1px solid var(--border2);color:var(--text3);padding:4px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit;}
+.cmv-edit-btn:hover{border-color:var(--accent);color:var(--accent);}
 .cmv-del-btn{background:none;border:1px solid var(--border2);color:var(--text3);padding:4px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit;margin-left:auto;}
 .cmv-del-btn:hover{border-color:var(--danger);color:var(--danger);}
 .cmv-status{font-size:11px;color:var(--text2);width:100%;}
@@ -2648,6 +2650,7 @@ const VaultDB = {
 
 let _cmVaultVideoFile = null;
 let _cmVaultPhotoFiles = [];
+let _cmvEditingId = null;
 
 async function renderVaultTab(){
   const fw = document.getElementById('feedWrap');
@@ -2667,6 +2670,7 @@ async function renderVaultTab(){
 
   _cmVaultVideoFile = null;
   _cmVaultPhotoFiles = [];
+  _cmvEditingId = null;
 
   document.getElementById('cmvVideoInput').onchange = function(){
     _cmVaultVideoFile = this.files[0] || null;
@@ -2787,6 +2791,10 @@ async function cmvRenderFeed(){
     btn.className = 'btn-publish';
     btn.textContent = '📤 발행';
     btn.onclick = () => cmvPublish(item, parseInt(sel.value), statusEl, btn);
+    const editBtn = document.createElement('button');
+    editBtn.className = 'cmv-edit-btn';
+    editBtn.textContent = '수정';
+    editBtn.onclick = () => cmvStartEdit(item);
     const delBtn = document.createElement('button');
     delBtn.className = 'cmv-del-btn';
     delBtn.textContent = '삭제';
@@ -2797,6 +2805,7 @@ async function cmvRenderFeed(){
     };
     pub.appendChild(sel);
     pub.appendChild(btn);
+    pub.appendChild(editBtn);
     pub.appendChild(delBtn);
     pub.appendChild(statusEl);
     card.appendChild(pub);
@@ -2805,65 +2814,71 @@ async function cmvRenderFeed(){
   }
 }
 
+function cmvStartEdit(item){
+  _cmvEditingId = item.id;
+  document.getElementById('cmvText').value = item.text || '';
+  document.getElementById('cmvLink').value = item.link || '';
+  _cmVaultVideoFile = item.videoBlob || null;
+  _cmVaultPhotoFiles = item.photoBlobs ? item.photoBlobs.slice() : [];
+  const vb = document.getElementById('cmvVideoBtnLabel');
+  if(vb){ vb.textContent = _cmVaultVideoFile ? ('🎬 ' + (item.videoName||'영상')) : '🎬 영상 선택'; _cmVaultVideoFile ? vb.classList.add('has-file') : vb.classList.remove('has-file'); }
+  const pb = document.getElementById('cmvPhotoBtnLabel');
+  if(pb){ pb.textContent = _cmVaultPhotoFiles.length ? ('📷 사진 ' + _cmVaultPhotoFiles.length + '장') : '📷 사진 선택'; _cmVaultPhotoFiles.length ? pb.classList.add('has-file') : pb.classList.remove('has-file'); }
+  const saveBtn = document.querySelector('.cmv-save-btn');
+  if(saveBtn) saveBtn.textContent = '수정하기';
+  document.querySelector('.cmv-form-card')?.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
 async function cmvSave(){
   const text = document.getElementById('cmvText').value.trim();
   const link = document.getElementById('cmvLink').value.trim();
   if(!text && !link && !_cmVaultVideoFile && !_cmVaultPhotoFiles.length){
     toast('글, 링크, 영상, 또는 사진을 하나 이상 입력해주세요', 'warn'); return;
   }
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+  const isEdit = !!_cmvEditingId;
+  const id = isEdit ? _cmvEditingId : (Date.now().toString(36) + Math.random().toString(36).slice(2,7));
+  const existing = isEdit ? (await VaultDB.getAll()).find(i=>i.id===id) : null;
   const item = {
     id,
     text,
     link: link || null,
-    videoBlob:   _cmVaultVideoFile  || null,
-    videoName:   _cmVaultVideoFile ? _cmVaultVideoFile.name : null,
-    photoBlobs:  _cmVaultPhotoFiles.slice(),
-    photoNames:  _cmVaultPhotoFiles.map(f=>f.name),
-    createdAt:   Date.now()
+    videoBlob:   _cmVaultVideoFile  || (existing?.videoBlob  || null),
+    videoName:   _cmVaultVideoFile ? _cmVaultVideoFile.name : (existing?.videoName || null),
+    photoBlobs:  _cmVaultPhotoFiles.length ? _cmVaultPhotoFiles.slice() : (existing?.photoBlobs || []),
+    photoNames:  _cmVaultPhotoFiles.length ? _cmVaultPhotoFiles.map(f=>f.name) : (existing?.photoNames || []),
+    createdAt:   existing?.createdAt || Date.now()
   };
   try{
     await VaultDB.save(item);
-    toast('저장됨 ✓', true);
+    toast(isEdit ? '수정됨 ✓' : '저장됨 ✓', true);
     document.getElementById('cmvText').value = '';
     document.getElementById('cmvLink').value = '';
-    _cmVaultVideoFile = null; _cmVaultPhotoFiles = [];
+    _cmVaultVideoFile = null; _cmVaultPhotoFiles = []; _cmvEditingId = null;
     const vb = document.getElementById('cmvVideoBtnLabel'); if(vb){ vb.textContent='🎬 영상 선택'; vb.classList.remove('has-file'); }
     const pb = document.getElementById('cmvPhotoBtnLabel'); if(pb){ pb.textContent='📷 사진 선택'; pb.classList.remove('has-file'); }
     document.getElementById('cmvVideoInput').value = '';
     document.getElementById('cmvPhotoInput').value = '';
+    const saveBtn = document.querySelector('.cmv-save-btn'); if(saveBtn) saveBtn.textContent = '저장하기';
     await cmvRenderFeed();
-  } catch(e){ toast('저장 실패: '+e.message, 'error'); }
+  } catch(e){ toast((isEdit?'수정':'저장') + ' 실패: '+e.message, 'error'); }
 }
 
 async function _cmvUploadBlob(blob, filename, statusEl, label){
   if(statusEl) statusEl.textContent = label + ' 업로드 중...';
   const isVid = blob.type.includes('video') || /\.(mp4|mov|avi|mkv|webm)$/i.test(filename||'');
   const ext = isVid ? 'mp4' : 'jpg';
+  const safeName = (filename || ('media.' + ext)).replace(/[^a-zA-Z0-9._-]/g, '_');
 
-  // 1차: transfer.sh
   try{
-    const r = await fetch('https://transfer.sh/media.' + ext, {
-      method:'PUT', body:blob, headers:{'Max-Days':'1'}
-    });
+    const fd = new FormData();
+    fd.append('file', blob, safeName);
+    const r = await fetch('https://atrd.kr/api/media/upload', { method:'POST', body:fd });
     if(!r.ok) throw new Error('HTTP ' + r.status);
-    const url = (await r.text()).trim();
-    if(url.startsWith('http')) return url;
-    throw new Error('응답 오류');
+    const j = await r.json();
+    if(j.url) return j.url;
+    throw new Error('응답 오류: ' + JSON.stringify(j));
   } catch(e1){
-    // 2차: 0x0.st
-    if(statusEl) statusEl.textContent = label + ' 재시도 중...';
-    try{
-      const fd = new FormData();
-      fd.append('file', blob, 'media.' + ext);
-      const r = await fetch('https://0x0.st', { method:'POST', body:fd });
-      if(!r.ok) throw new Error('HTTP ' + r.status);
-      const url = (await r.text()).trim();
-      if(url.startsWith('http')) return url;
-      throw new Error('응답 오류');
-    } catch(e2){
-      throw new Error(label + ' 업로드 실패 — ' + e1.message + ' / ' + e2.message);
-    }
+    throw new Error(label + ' 업로드 실패 — ' + e1.message);
   }
 }
 
