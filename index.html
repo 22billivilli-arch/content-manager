@@ -325,6 +325,43 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 }
 .btn-more-feed:hover{border-color:var(--accent);color:var(--accent);}
 
+/* ── CM VAULT ── */
+.cmv-wrap{max-width:700px;margin:0 auto;padding:16px 8px;}
+.cmv-form-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:18px;}
+.cmv-form-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.cmv-form-title{font-size:14px;font-weight:700;}
+.cmv-textarea{width:100%;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r2);color:var(--text);font-family:inherit;font-size:13px;padding:10px;resize:vertical;min-height:90px;outline:none;transition:border-color .2s;}
+.cmv-textarea:focus{border-color:var(--accent);}
+.cmv-file-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+.cmv-file-btn{background:var(--bg4);border:1px solid var(--border2);color:var(--text2);padding:7px 12px;border-radius:var(--r2);cursor:pointer;font-size:12px;font-family:inherit;transition:all .15s;display:flex;align-items:center;gap:5px;}
+.cmv-file-btn:hover{border-color:var(--accent);color:var(--accent);}
+.cmv-file-btn.has-file{border-color:var(--accent);color:var(--accent);}
+.cmv-save-btn{background:var(--accent);border:none;color:#000;padding:8px 20px;border-radius:var(--r2);cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;margin-top:12px;transition:opacity .2s;}
+.cmv-save-btn:hover{opacity:.85;}
+.cmv-feed{display:flex;flex-direction:column;gap:12px;}
+.cmv-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.cmv-card-photos{display:grid;gap:3px;background:#000;}
+.cmv-card-photos.p1{grid-template-columns:1fr;}
+.cmv-card-photos.p2{grid-template-columns:1fr 1fr;}
+.cmv-card-photos.p3{grid-template-columns:1fr 1fr 1fr;}
+.cmv-card-photos img{width:100%;height:200px;object-fit:cover;display:block;}
+.cmv-card-vid{padding:10px 13px;background:var(--bg4);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text2);}
+.cmv-card-text{padding:11px 13px;font-size:13px;white-space:pre-wrap;word-break:break-word;max-height:80px;overflow:hidden;}
+.cmv-card-text.expanded{max-height:none;}
+.cmv-card-more{background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;font-family:inherit;padding:0 13px 6px;}
+.cmv-card-pub{padding:9px 13px;border-top:1px solid var(--border);display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.cmv-card-meta{padding:4px 13px;font-size:10px;color:var(--text3);}
+.cmv-del-btn{background:none;border:1px solid var(--border2);color:var(--text3);padding:4px 9px;border-radius:5px;cursor:pointer;font-size:11px;font-family:inherit;margin-left:auto;}
+.cmv-del-btn:hover{border-color:var(--danger);color:var(--danger);}
+.cmv-status{font-size:11px;color:var(--text2);width:100%;}
+.cmv-empty{text-align:center;padding:52px 20px;color:var(--text2);}
+.cmv-empty .ico{font-size:36px;margin-bottom:10px;}
+.cmv-link-input{width:100%;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r2);color:var(--text2);font-family:inherit;font-size:12px;padding:8px 10px;outline:none;transition:border-color .2s;margin-top:8px;}
+.cmv-link-input:focus{border-color:var(--accent);}
+.cmv-link-input::placeholder{color:var(--text3);}
+.cmv-card-link{display:block;padding:7px 13px;font-size:11px;color:var(--accent);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-top:1px solid var(--border);background:var(--accent-dim2);}
+.cmv-card-link:hover{text-decoration:underline;}
+
 /* ── ACCOUNT TABS ── */
 .acc-tabs{display:flex;gap:6px;flex-wrap:wrap;}
 .acc-tab{
@@ -778,7 +815,7 @@ let tUser     = null;
 let nextCur   = null;
 let allPosts  = [];
 let curAccIdx = 0;
-let curPage   = 'sched'; // 'sched' | 'feed' | 'favs' | 'cp' | 'vd'
+let curPage   = 'sched'; // 'sched' | 'vault' | 'cp' | 'vd'
 
 // ═══════════════════════════════════════════════
 //  HELPERS
@@ -1035,15 +1072,10 @@ function switchPage(page){
   } else {
     pageSched.style.display   = 'none';
     pageThreads.style.display = '';
-    if(page === 'feed'){
-      fc.style.display = 'flex';
-      loadFeed();
-    } else {
-      fc.style.display = 'none';
-      if(page === 'favs')    renderFavsTab();
-      else if(page === 'cp') renderCpTab();
-      else                   renderVideoTab();
-    }
+    fc.style.display = 'none';
+    if(page === 'vault')     renderVaultTab();
+    else if(page === 'cp')   renderCpTab();
+    else                     renderVideoTab();
   }
 }
 
@@ -1052,8 +1084,7 @@ function renderTopNav(){
   nav.innerHTML = '';
   const tabs = [
     {id:'sched', label:'📋 스케줄러'},
-    {id:'feed',  label:'📱 피드'},
-    {id:'favs',  label:'⭐ 즐겨찾기'},
+    {id:'vault', label:'📦 보관소'},
     {id:'cp',    label:'🔗 쿠파스변환'},
     {id:'vd',    label:'📥 영상다운로드'},
   ];
@@ -1850,8 +1881,10 @@ function renderCpTab(){
       toast('먼저 API 키를 설정해주세요');
       return;
     }
-    const url = q('_cpUrl').value.trim();
+    let url = q('_cpUrl').value.trim();
     if(!url){ toast('쿠팡 상품 URL을 입력해주세요'); return; }
+    // 한글이 포함된 경우 한글 부분 제거 (Hangul 음절·자모 범위)
+    url = url.replace(/[가-힣ㄱ-ㆎᄀ-ᇿ]+/g, '').replace(/--+/g, '-').replace(/-(?=\/)/g, '').replace(/-$/, '');
 
     const convertBtn = q('_cpConvertBtn');
     convertBtn.disabled = true;
@@ -2563,6 +2596,295 @@ document.getElementById('syncPullBtn').onclick = async () => {
 
   render();
 })();
+
+// ═══════════════════════════════════════════════
+//  CM VAULT (콘텐츠 보관소)
+// ═══════════════════════════════════════════════
+const VaultDB = {
+  _db: null,
+  _open(){
+    if(this._db) return Promise.resolve(this._db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('cm_vault_v1', 1);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains('items'))
+          db.createObjectStore('items', {keyPath:'id'});
+      };
+      req.onsuccess = e => { this._db = e.target.result; resolve(this._db); };
+      req.onerror   = () => reject(req.error);
+    });
+  },
+  async getAll(){
+    const db = await this._open();
+    return new Promise((res, rej) => {
+      const req = db.transaction('items','readonly').objectStore('items').getAll();
+      req.onsuccess = () => res((req.result||[]).sort((a,b)=>b.createdAt-a.createdAt));
+      req.onerror   = () => rej(req.error);
+    });
+  },
+  async save(item){
+    const db = await this._open();
+    return new Promise((res, rej) => {
+      const req = db.transaction('items','readwrite').objectStore('items').put(item);
+      req.onsuccess = () => res();
+      req.onerror   = () => rej(req.error);
+    });
+  },
+  async del(id){
+    const db = await this._open();
+    return new Promise((res, rej) => {
+      const req = db.transaction('items','readwrite').objectStore('items').delete(id);
+      req.onsuccess = () => res();
+      req.onerror   = () => rej(req.error);
+    });
+  }
+};
+
+let _cmVaultVideoFile = null;
+let _cmVaultPhotoFiles = [];
+
+async function renderVaultTab(){
+  const fw = document.getElementById('feedWrap');
+  fw.innerHTML = '<div class="cmv-wrap" id="cmvWrap"><div class="cmv-form-card"><div class="cmv-form-header"><span class="cmv-form-title">📦 콘텐츠 보관소</span></div>' +
+    '<textarea class="cmv-textarea" id="cmvText" placeholder="글을 작성하세요..."></textarea>' +
+    '<input type="url" class="cmv-link-input" id="cmvLink" placeholder="🔗 제품 링크 메모 (선택, 발행에 포함 안됨)">' +
+    '<div class="cmv-file-row">' +
+      '<button class="cmv-file-btn" id="cmvVideoBtnLabel" onclick="document.getElementById(\'cmvVideoInput\').click()">🎬 영상 선택</button>' +
+      '<input type="file" id="cmvVideoInput" accept="video/*" style="display:none">' +
+      '<button class="cmv-file-btn" id="cmvPhotoBtnLabel" onclick="document.getElementById(\'cmvPhotoInput\').click()">📷 사진 선택</button>' +
+      '<input type="file" id="cmvPhotoInput" accept="image/*" multiple style="display:none">' +
+    '</div>' +
+    '<button class="cmv-save-btn" onclick="cmvSave()">저장하기</button>' +
+    '</div>' +
+    '<div class="cmv-feed" id="cmvFeed"><div class="cmv-empty"><div class="ico">⏳</div><p>불러오는 중...</p></div></div>' +
+  '</div>';
+
+  _cmVaultVideoFile = null;
+  _cmVaultPhotoFiles = [];
+
+  document.getElementById('cmvVideoInput').onchange = function(){
+    _cmVaultVideoFile = this.files[0] || null;
+    const btn = document.getElementById('cmvVideoBtnLabel');
+    if(_cmVaultVideoFile){ btn.textContent = '🎬 ' + _cmVaultVideoFile.name; btn.classList.add('has-file'); }
+    else { btn.textContent = '🎬 영상 선택'; btn.classList.remove('has-file'); }
+  };
+  document.getElementById('cmvPhotoInput').onchange = function(){
+    _cmVaultPhotoFiles = Array.from(this.files);
+    const btn = document.getElementById('cmvPhotoBtnLabel');
+    if(_cmVaultPhotoFiles.length){ btn.textContent = '📷 사진 ' + _cmVaultPhotoFiles.length + '장'; btn.classList.add('has-file'); }
+    else { btn.textContent = '📷 사진 선택'; btn.classList.remove('has-file'); }
+  };
+
+  await cmvRenderFeed();
+}
+
+async function cmvRenderFeed(){
+  const el = document.getElementById('cmvFeed');
+  if(!el) return;
+  let items;
+  try{ items = await VaultDB.getAll(); } catch(e){ el.innerHTML = '<div class="cmv-empty"><div class="ico">⚠️</div><p>불러오기 실패</p></div>'; return; }
+  if(!items.length){ el.innerHTML = '<div class="cmv-empty"><div class="ico">📦</div><p>저장된 콘텐츠가 없습니다<br>위에서 작성 후 저장하세요</p></div>'; return; }
+
+  el.innerHTML = '';
+  for(const item of items){
+    const card = document.createElement('div');
+    card.className = 'cmv-card';
+
+    // photos
+    if(item.photoBlobs && item.photoBlobs.length){
+      const n = Math.min(item.photoBlobs.length, 3);
+      const pg = document.createElement('div');
+      pg.className = 'cmv-card-photos p' + n;
+      for(let i=0;i<n;i++){
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(item.photoBlobs[i]);
+        img.loading = 'lazy';
+        pg.appendChild(img);
+      }
+      card.appendChild(pg);
+    }
+
+    // video badge
+    if(item.videoBlob){
+      const vd = document.createElement('div');
+      vd.className = 'cmv-card-vid';
+      vd.innerHTML = '🎬 <span>' + (item.videoName || 'video') + '</span>';
+      card.appendChild(vd);
+    }
+
+    // text
+    if(item.text){
+      const tx = document.createElement('div');
+      tx.className = 'cmv-card-text';
+      tx.textContent = item.text;
+      card.appendChild(tx);
+      if(item.text.length > 120){
+        const more = document.createElement('button');
+        more.className = 'cmv-card-more';
+        more.textContent = '더 보기';
+        more.onclick = function(){ tx.classList.toggle('expanded'); this.textContent = tx.classList.contains('expanded') ? '접기' : '더 보기'; };
+        card.appendChild(more);
+      }
+    }
+
+    // link memo
+    if(item.link){
+      const lk = document.createElement('a');
+      lk.className = 'cmv-card-link';
+      lk.href = item.link;
+      lk.target = '_blank';
+      lk.rel = 'noopener';
+      lk.textContent = '🔗 ' + item.link;
+      card.appendChild(lk);
+    }
+
+    // meta
+    const meta = document.createElement('div');
+    meta.className = 'cmv-card-meta';
+    meta.textContent = new Date(item.createdAt).toLocaleString('ko-KR');
+    card.appendChild(meta);
+
+    // publish bar
+    const pub = document.createElement('div');
+    pub.className = 'cmv-card-pub';
+    const sel = document.createElement('select');
+    sel.className = 'pub-select';
+    FEED_ACCOUNTS.forEach((acc,i) => {
+      const opt = document.createElement('option');
+      opt.value = i; opt.textContent = acc.name;
+      sel.appendChild(opt);
+    });
+    const statusEl = document.createElement('div');
+    statusEl.className = 'cmv-status';
+    const btn = document.createElement('button');
+    btn.className = 'btn-publish';
+    btn.textContent = '📤 발행';
+    btn.onclick = () => cmvPublish(item, parseInt(sel.value), statusEl, btn);
+    const delBtn = document.createElement('button');
+    delBtn.className = 'cmv-del-btn';
+    delBtn.textContent = '삭제';
+    delBtn.onclick = async () => {
+      if(!confirm('이 콘텐츠를 삭제하시겠습니까?')) return;
+      await VaultDB.del(item.id);
+      await cmvRenderFeed();
+    };
+    pub.appendChild(sel);
+    pub.appendChild(btn);
+    pub.appendChild(delBtn);
+    pub.appendChild(statusEl);
+    card.appendChild(pub);
+
+    el.appendChild(card);
+  }
+}
+
+async function cmvSave(){
+  const text = document.getElementById('cmvText').value.trim();
+  const link = document.getElementById('cmvLink').value.trim();
+  if(!text && !link && !_cmVaultVideoFile && !_cmVaultPhotoFiles.length){
+    toast('글, 링크, 영상, 또는 사진을 하나 이상 입력해주세요', 'warn'); return;
+  }
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+  const item = {
+    id,
+    text,
+    link: link || null,
+    videoBlob:   _cmVaultVideoFile  || null,
+    videoName:   _cmVaultVideoFile ? _cmVaultVideoFile.name : null,
+    photoBlobs:  _cmVaultPhotoFiles.slice(),
+    photoNames:  _cmVaultPhotoFiles.map(f=>f.name),
+    createdAt:   Date.now()
+  };
+  try{
+    await VaultDB.save(item);
+    toast('저장됨 ✓', true);
+    document.getElementById('cmvText').value = '';
+    document.getElementById('cmvLink').value = '';
+    _cmVaultVideoFile = null; _cmVaultPhotoFiles = [];
+    const vb = document.getElementById('cmvVideoBtnLabel'); if(vb){ vb.textContent='🎬 영상 선택'; vb.classList.remove('has-file'); }
+    const pb = document.getElementById('cmvPhotoBtnLabel'); if(pb){ pb.textContent='📷 사진 선택'; pb.classList.remove('has-file'); }
+    document.getElementById('cmvVideoInput').value = '';
+    document.getElementById('cmvPhotoInput').value = '';
+    await cmvRenderFeed();
+  } catch(e){ toast('저장 실패: '+e.message, 'error'); }
+}
+
+async function _cmvUploadBlob(blob, filename, statusEl, label){
+  if(statusEl) statusEl.textContent = label + ' 업로드 중...';
+  const res = await fetch('https://transfer.sh/' + encodeURIComponent(filename || 'file'), {
+    method:'PUT', body:blob, headers:{'Max-Days':'1'}
+  });
+  if(!res.ok) throw new Error(label + ' 업로드 실패 (' + res.status + ')');
+  const url = (await res.text()).trim();
+  if(!url.startsWith('http')) throw new Error(label + ' 업로드 응답 오류');
+  return url;
+}
+
+async function cmvPublish(item, accIdx, statusEl, btn){
+  const acc = FEED_ACCOUNTS[accIdx];
+  if(!acc?.token){ statusEl.textContent='토큰 없음'; return; }
+  btn.disabled = true;
+  statusEl.style.color = 'var(--text2)';
+  try{
+    statusEl.textContent = '계정 확인 중...';
+    const me = await apiFetch(API+'/me?fields=id&access_token='+acc.token);
+    const uid = me.id;
+    const text = item.text || '';
+    let containerId;
+
+    if(item.videoBlob){
+      const vidUrl = await _cmvUploadBlob(item.videoBlob, item.videoName||'video.mp4', statusEl, '영상');
+      const params = {media_type:'VIDEO', video_url:vidUrl, access_token:acc.token};
+      if(text) params.text = text;
+      const r = await apiPost(API+'/'+uid+'/threads', params);
+      containerId = r.id;
+      for(let i=0;i<20;i++){
+        await new Promise(res=>setTimeout(res,3000));
+        const s = await apiFetch(API+'/'+containerId+'?fields=status,error_message&access_token='+acc.token);
+        statusEl.textContent = '영상 인코딩 중... (' + ((i+1)*3) + 's)';
+        if(s.status==='FINISHED') break;
+        if(s.status==='ERROR') throw new Error('영상 처리 실패: '+(s.error_message||'UNKNOWN'));
+        if(i===19) throw new Error('영상 인코딩 타임아웃');
+      }
+    } else if(item.photoBlobs && item.photoBlobs.length === 1){
+      const imgUrl = await _cmvUploadBlob(item.photoBlobs[0], item.photoNames[0]||'image.jpg', statusEl, '이미지');
+      const params = {media_type:'IMAGE', image_url:imgUrl, access_token:acc.token};
+      if(text) params.text = text;
+      const r = await apiPost(API+'/'+uid+'/threads', params);
+      containerId = r.id;
+    } else if(item.photoBlobs && item.photoBlobs.length > 1){
+      const childIds = [];
+      for(let i=0;i<item.photoBlobs.length;i++){
+        const imgUrl = await _cmvUploadBlob(item.photoBlobs[i], item.photoNames[i]||('image'+i+'.jpg'), statusEl, '이미지 '+(i+1));
+        const r = await apiPost(API+'/'+uid+'/threads', {
+          media_type:'IMAGE', image_url:imgUrl, is_carousel_item:'true', access_token:acc.token
+        });
+        childIds.push(r.id);
+      }
+      statusEl.textContent = '캐러셀 생성 중...';
+      const r = await apiPost(API+'/'+uid+'/threads', {
+        media_type:'CAROUSEL', children:childIds.join(','), text, access_token:acc.token
+      });
+      containerId = r.id;
+    } else {
+      if(!text) throw new Error('발행할 내용이 없습니다');
+      const r = await apiPost(API+'/'+uid+'/threads', {media_type:'TEXT', text, access_token:acc.token});
+      containerId = r.id;
+    }
+
+    statusEl.textContent = '발행 중...';
+    await apiPost(API+'/'+uid+'/threads_publish', {creation_id:containerId, access_token:acc.token});
+    statusEl.textContent = '✓ 발행 완료!';
+    statusEl.style.color = 'var(--accent)';
+    btn.textContent = '✓ 완료';
+  } catch(e){
+    statusEl.textContent = '오류: ' + e.message;
+    statusEl.style.color = 'var(--danger)';
+    btn.disabled = false;
+    btn.textContent = '📤 발행';
+  }
+}
 </script>
 </body>
 </html>
