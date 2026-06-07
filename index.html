@@ -359,7 +359,8 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 .cmv-link-input{width:100%;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r2);color:var(--text2);font-family:inherit;font-size:12px;padding:8px 10px;outline:none;transition:border-color .2s;margin-top:8px;}
 .cmv-link-input:focus{border-color:var(--accent);}
 .cmv-link-input::placeholder{color:var(--text3);}
-.cmv-card-link{display:block;padding:7px 13px;font-size:11px;color:var(--accent);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-top:1px solid var(--border);background:var(--accent-dim2);}
+.cmv-card-link{display:block;padding:7px 13px;font-size:11px;color:var(--accent);text-decoration:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border-top:1px solid var(--border);background:var(--accent-dim2);transition:white-space .1s;}
+.cmv-card-link.expanded{white-space:normal;word-break:break-all;}
 .cmv-card-link:hover{text-decoration:underline;}
 .cmv-card-mixed{display:grid;grid-template-columns:1fr 1fr;gap:3px;background:#000;max-height:300px;overflow:hidden;}
 .cmv-card-mixed video,.cmv-card-mixed img{width:100%;height:300px;object-fit:cover;display:block;cursor:pointer;}
@@ -2753,6 +2754,9 @@ async function cmvRenderFeed(){
       lk.target = '_blank';
       lk.rel = 'noopener';
       lk.textContent = '🔗 ' + item.link;
+      lk.onclick = function(e){
+        if(!this.classList.contains('expanded')){ e.preventDefault(); this.classList.add('expanded'); }
+      };
       card.appendChild(lk);
     }
 
