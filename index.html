@@ -356,12 +356,13 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 .cmv-status{font-size:11px;color:var(--text2);width:100%;}
 .cmv-empty{text-align:center;padding:52px 20px;color:var(--text2);}
 .cmv-empty .ico{font-size:36px;margin-bottom:10px;}
-.cmv-link-input{width:100%;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r2);color:var(--text2);font-family:inherit;font-size:12px;padding:8px 10px;outline:none;transition:border-color .2s;margin-top:8px;}
+.cmv-link-input{width:100%;background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r2);color:var(--text2);font-family:inherit;font-size:12px;padding:8px 10px;outline:none;transition:border-color .2s;margin-top:8px;resize:vertical;}
 .cmv-link-input:focus{border-color:var(--accent);}
 .cmv-link-input::placeholder{color:var(--text3);}
-.cmv-card-link{display:block;padding:7px 13px;font-size:11px;color:var(--accent);text-decoration:none;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;border-top:1px solid var(--border);background:var(--accent-dim2);transition:white-space .1s;}
-.cmv-card-link.expanded{white-space:normal;word-break:break-all;}
-.cmv-card-link:hover{text-decoration:underline;}
+.cmv-card-link{display:flex;align-items:flex-start;gap:6px;padding:7px 13px;border-top:1px solid var(--border);background:var(--accent-dim2);}
+.cmv-card-link-text{flex:1;font-size:11px;color:var(--accent);white-space:pre-wrap;word-break:break-all;}
+.cmv-link-copy-btn{flex-shrink:0;background:none;border:1px solid rgba(0,212,170,.35);color:var(--accent);border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;font-family:inherit;}
+.cmv-link-copy-btn:active{background:var(--accent);color:#000;}
 .cmv-card-mixed{display:grid;grid-template-columns:1fr 1fr;gap:3px;background:#000;max-height:300px;overflow:hidden;}
 .cmv-card-mixed video,.cmv-card-mixed img{width:100%;height:300px;object-fit:cover;display:block;cursor:pointer;}
 .cmv-card-video-only video{width:100%;max-height:340px;display:block;object-fit:cover;background:#000;}
@@ -2652,7 +2653,7 @@ async function renderVaultTab(){
   const fw = document.getElementById('feedWrap');
   fw.innerHTML = '<div class="cmv-wrap" id="cmvWrap"><div class="cmv-form-card"><div class="cmv-form-header"><span class="cmv-form-title">📦 콘텐츠 보관소</span></div>' +
     '<textarea class="cmv-textarea" id="cmvText" placeholder="글을 작성하세요..."></textarea>' +
-    '<input type="url" class="cmv-link-input" id="cmvLink" placeholder="🔗 제품 링크 메모 (선택, 발행에 포함 안됨)">' +
+    '<textarea class="cmv-link-input" id="cmvLink" placeholder="🔗 링크·메모 (발행에 포함 안됨)" rows="2"></textarea>' +
     '<div class="cmv-file-row">' +
       '<button class="cmv-file-btn" id="cmvVideoBtnLabel" onclick="document.getElementById(\'cmvVideoInput\').click()">🎬 영상 선택</button>' +
       '<input type="file" id="cmvVideoInput" accept="video/*" style="display:none">' +
@@ -2748,16 +2749,20 @@ async function cmvRenderFeed(){
 
     // link memo
     if(item.link){
-      const lk = document.createElement('a');
-      lk.className = 'cmv-card-link';
-      lk.href = item.link;
-      lk.target = '_blank';
-      lk.rel = 'noopener';
-      lk.textContent = '🔗 ' + item.link;
-      lk.onclick = function(e){
-        if(!this.classList.contains('expanded')){ e.preventDefault(); this.classList.add('expanded'); }
+      const lkWrap = document.createElement('div');
+      lkWrap.className = 'cmv-card-link';
+      const lkText = document.createElement('div');
+      lkText.className = 'cmv-card-link-text';
+      lkText.textContent = '🔗 ' + item.link;
+      const lkCopy = document.createElement('button');
+      lkCopy.className = 'cmv-link-copy-btn';
+      lkCopy.textContent = '복사';
+      lkCopy.onclick = function(){
+        navigator.clipboard.writeText(item.link).then(()=>{ this.textContent='✓'; setTimeout(()=>{ this.textContent='복사'; },1500); }).catch(()=>{ prompt('복사하세요:', item.link); });
       };
-      card.appendChild(lk);
+      lkWrap.appendChild(lkText);
+      lkWrap.appendChild(lkCopy);
+      card.appendChild(lkWrap);
     }
 
     // meta
@@ -2835,14 +2840,31 @@ async function _cmvUploadBlob(blob, filename, statusEl, label){
   if(statusEl) statusEl.textContent = label + ' 업로드 중...';
   const isVid = blob.type.includes('video') || /\.(mp4|mov|avi|mkv|webm)$/i.test(filename||'');
   const ext = isVid ? 'mp4' : 'jpg';
-  const res = await fetch('https://transfer.sh/media.' + ext, {
-    method:'PUT', body:blob,
-    headers:{'Max-Days':'1', 'Content-Type': isVid ? 'video/mp4' : 'image/jpeg'}
-  });
-  if(!res.ok) throw new Error(label + ' 업로드 실패 (HTTP ' + res.status + ')');
-  const url = (await res.text()).trim();
-  if(!url.startsWith('http')) throw new Error(label + ' 업로드 응답 오류');
-  return url;
+
+  // 1차: transfer.sh
+  try{
+    const r = await fetch('https://transfer.sh/media.' + ext, {
+      method:'PUT', body:blob, headers:{'Max-Days':'1'}
+    });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const url = (await r.text()).trim();
+    if(url.startsWith('http')) return url;
+    throw new Error('응답 오류');
+  } catch(e1){
+    // 2차: 0x0.st
+    if(statusEl) statusEl.textContent = label + ' 재시도 중...';
+    try{
+      const fd = new FormData();
+      fd.append('file', blob, 'media.' + ext);
+      const r = await fetch('https://0x0.st', { method:'POST', body:fd });
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      const url = (await r.text()).trim();
+      if(url.startsWith('http')) return url;
+      throw new Error('응답 오류');
+    } catch(e2){
+      throw new Error(label + ' 업로드 실패 — ' + e1.message + ' / ' + e2.message);
+    }
+  }
 }
 
 async function cmvPublish(item, accIdx, statusEl, btn){
