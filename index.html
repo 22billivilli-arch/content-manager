@@ -2062,6 +2062,67 @@ function _showVideoSaveOverlay(videoUrl){
   document.getElementById('_vidOverlayClose').onclick = () => overlay.remove();
 }
 
+// ── 컨테이너(영상) 인코딩 완료 대기 ──
+async function waitContainer(cid, token, statusEl, idx){
+  for(let j=0;j<40;j++){
+    await new Promise(r=>setTimeout(r,3000));
+    const s = await apiFetch(`${API}/${cid}?fields=status,error_message&access_token=${token}`);
+    if(statusEl) statusEl.textContent = `영상${idx?' '+idx:''} 인코딩 중... (${(j+1)*3}s)`;
+    if(s.status==='FINISHED') return;
+    if(s.status==='ERROR') throw new Error(`영상${idx?' '+idx:''} 처리 실패: ${s.error_message||'UNKNOWN'}`);
+  }
+  throw new Error('영상 인코딩 타임아웃');
+}
+
+// ── 다운로드한 미디어(영상+사진) + 대본 텍스트를 선택 계정으로 발행 ──
+async function publishComposed(images, videos, text, acc, statusEl){
+  if(!acc || !acc.token) throw new Error('계정 토큰이 없습니다');
+  const setS = m => { if(statusEl){ statusEl.style.color='var(--text2)'; statusEl.textContent=m; } };
+  setS('계정 확인 중...');
+  const me = await apiFetch(`${API}/me?fields=id&access_token=${acc.token}`);
+  const uid = me.id;
+  const media = [
+    ...videos.map(u=>({url:u, type:'VIDEO'})),
+    ...images.map(u=>({url:u, type:'IMAGE'})),
+  ].slice(0,20);
+  if(!media.length){
+    if(!text) throw new Error('발행할 미디어/텍스트가 없습니다');
+    setS('텍스트 게시물 생성...');
+    const r = await apiPost(`${API}/${uid}/threads`, {media_type:'TEXT', text, access_token:acc.token});
+    setS('발행 중...'); await apiPost(`${API}/${uid}/threads_publish`, {creation_id:r.id, access_token:acc.token}); return;
+  }
+  if(media.length===1){
+    const m=media[0];
+    setS('미디어 업로드 중...');
+    const hosted = await uploadMediaToTempHost(m.url, statusEl);
+    const params = {media_type:m.type, [m.type==='VIDEO'?'video_url':'image_url']:hosted, access_token:acc.token};
+    if(text) params.text = text;
+    setS((m.type==='VIDEO'?'영상':'이미지')+' 컨테이너 생성...');
+    const res = await apiPost(`${API}/${uid}/threads`, params);
+    if(m.type==='VIDEO') await waitContainer(res.id, acc.token, statusEl);
+    setS('발행 중...');
+    await apiPost(`${API}/${uid}/threads_publish`, {creation_id:res.id, access_token:acc.token});
+    return;
+  }
+  const childIds=[];
+  for(let i=0;i<media.length;i++){
+    const m=media[i];
+    setS(`미디어 ${i+1}/${media.length} 업로드...`);
+    const hosted = await uploadMediaToTempHost(m.url, statusEl);
+    const r = await apiPost(`${API}/${uid}/threads`, {
+      media_type:m.type, [m.type==='VIDEO'?'video_url':'image_url']:hosted,
+      is_carousel_item:'true', access_token:acc.token
+    });
+    if(!r.id) throw new Error(`미디어 ${i+1} 컨테이너 생성 실패`);
+    if(m.type==='VIDEO') await waitContainer(r.id, acc.token, statusEl, i+1);
+    childIds.push(r.id);
+  }
+  setS('캐러셀 생성...');
+  const res = await apiPost(`${API}/${uid}/threads`, {media_type:'CAROUSEL', children:childIds.join(','), text, access_token:acc.token});
+  setS('발행 중...');
+  await apiPost(`${API}/${uid}/threads_publish`, {creation_id:res.id, access_token:acc.token});
+}
+
 function renderVideoTab(){
   const fw = document.getElementById('feedWrap');
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -2080,11 +2141,23 @@ function renderVideoTab(){
         <button class="cp-btn" id="_vdClearBtn" style="margin-top:8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border2);">URL 지우기</button>
       </div>
       <div id="_vdItems" style="display:none;margin-top:16px;"></div>
+      <div id="_vdPublish" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+        <div class="cp-label">✍️ 대본 생성</div>
+        <textarea class="cp-input" id="_vdTopic" placeholder="주제/지시 입력 (예: 이 무선 이어폰의 장점을 후킹하게 소개)" style="width:100%;min-height:56px;font-size:13px;"></textarea>
+        <button class="cp-btn" id="_vdGenBtn" style="margin-top:8px;">🤖 대본 5개 생성</button>
+        <div id="_vdScripts" style="margin-top:12px;"></div>
+        <div class="cp-label" style="margin-top:14px;">계정 선택</div>
+        <select class="cp-input" id="_vdAcc" style="width:100%;font-size:13px;"></select>
+        <button class="cp-btn" id="_vdPubBtn" style="margin-top:10px;">📤 발행</button>
+        <div id="_vdPubStatus" style="margin-top:10px;font-size:13px;"></div>
+      </div>
       <div id="_vdErr" style="display:none;margin-top:12px;" class="cp-result err"></div>
     </div>
   `;
 
   const q = id => fw.querySelector('#' + id);
+  let _vdFetched = { images: [], videos: [] };  // 발행용 미디어
+  let _vdScriptList = [];                         // 생성된 대본 후보
 
   async function dlItem(rawUrl, fname, btn){
     const orig = btn.textContent;
@@ -2173,12 +2246,61 @@ function renderVideoTab(){
 
       container.style.display = 'block';
       toast(`미디어 ${total}개 발견`, true);
+      _vdFetched = { images, videos };
+      q('_vdAcc').innerHTML = FEED_ACCOUNTS.map((a,i)=>a.token?`<option value="${i}">${a.name}</option>`:'').join('');
+      q('_vdPublish').style.display = total>0 ? 'block' : 'none';
     } catch(e){
       q('_vdErr').style.display = 'block';
       q('_vdErr').textContent = '오류: ' + e.message;
     } finally {
       btn.disabled = false; btn.innerHTML = '미디어 가져오기';
     }
+  };
+
+  // ── 대본 생성 (Gemini) ──
+  q('_vdGenBtn').onclick = async () => {
+    const topic = q('_vdTopic').value.trim();
+    if(!topic){ toast('주제/지시를 입력해주세요'); return; }
+    const gb = q('_vdGenBtn'); gb.disabled = true; gb.innerHTML = '<span class="spin"></span> 생성 중...';
+    try{
+      const r = await fetch('https://cp-converter.vercel.app/api/gemini', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({topic, count:5}), signal: AbortSignal.timeout(40000),
+      });
+      const d = await r.json();
+      if(d.error) throw new Error(d.error);
+      _vdScriptList = d.scripts || [];
+      const box = q('_vdScripts'); box.innerHTML = '';
+      _vdScriptList.forEach((s, i) => {
+        const lab = document.createElement('label');
+        lab.style.cssText = 'display:block;border:1px solid var(--border);border-radius:var(--r2);padding:10px;margin-bottom:8px;cursor:pointer;font-size:13px;line-height:1.55;white-space:pre-wrap;';
+        const rd = document.createElement('input');
+        rd.type='radio'; rd.name='_vdScript'; rd.value=i; rd.style.marginRight='7px'; if(i===0) rd.checked=true;
+        lab.appendChild(rd);
+        lab.appendChild(document.createTextNode(s));
+        box.appendChild(lab);
+      });
+      if(!_vdScriptList.length) toast('대본 결과가 비었습니다');
+    }catch(e){ toast('대본 생성 실패: ' + e.message); }
+    finally{ gb.disabled=false; gb.innerHTML='🤖 대본 5개 생성'; }
+  };
+
+  // ── 발행 ──
+  q('_vdPubBtn').onclick = async () => {
+    const accVal = q('_vdAcc').value;
+    if(accVal===''){ toast('계정을 선택해주세요'); return; }
+    const acc = FEED_ACCOUNTS[parseInt(accVal)];
+    const sel = q('_vdScripts').querySelector('input[name=_vdScript]:checked');
+    const text = (sel && _vdScriptList[parseInt(sel.value)]) || '';
+    if(!_vdFetched.images.length && !_vdFetched.videos.length){ toast('먼저 미디어를 가져와주세요'); return; }
+    if(!confirm(`${acc.name} 계정으로 발행할까요?\n영상 ${_vdFetched.videos.length} · 사진 ${_vdFetched.images.length}${text?' · 대본 포함':''}`)) return;
+    const pb = q('_vdPubBtn'); pb.disabled = true;
+    const st = q('_vdPubStatus');
+    try{
+      await publishComposed(_vdFetched.images, _vdFetched.videos, text, acc, st);
+      st.style.color='var(--accent)'; st.textContent='✅ 발행 완료!'; toast('발행 완료!', true);
+    }catch(e){ st.style.color='#e66'; st.textContent='❌ '+e.message; toast('발행 실패: '+e.message); }
+    finally{ pb.disabled=false; }
   };
 
   // ── 틱톡 섹션 ──────────────────────────────────
