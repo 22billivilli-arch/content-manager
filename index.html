@@ -2401,20 +2401,12 @@ function initFirebase(){
 
 // CDN URL → transfer.sh 임시 업로드 → 공개 URL 반환 (24시간 후 자동 삭제)
 async function uploadMediaToTempHost(cdnUrl, statusEl){
-  statusEl.textContent = '미디어 다운로드 중...';
-  const blob = await _fetchBlob(cdnUrl);  // MEDIA_PROXY 경유 (CORS 우회)
-  if(!blob) throw new Error('미디어 다운로드 실패 — CDN 접근 불가');
-  const ext = blob.type.includes('video') ? 'mp4' : 'jpg';
-  statusEl.textContent = '임시 업로드 중...';
-  const uploadRes = await fetch(`https://transfer.sh/media.${ext}`, {
-    method: 'PUT',
-    body: blob,
-    headers: {'Max-Days': '1'}
-  });
-  if(!uploadRes.ok) throw new Error(`임시 업로드 실패 (${uploadRes.status})`);
-  const url = (await uploadRes.text()).trim();
-  if(!url.startsWith('http')) throw new Error('임시 업로드 응답 오류');
-  return url;
+  // transfer.sh 불안정 → 제거. Threads가 media-proxy를 직접 pull (CDN 헤더 우회 + 공개 URL).
+  if(statusEl) statusEl.textContent = '미디어 준비 중...';
+  if(!cdnUrl) throw new Error('미디어 URL 없음');
+  // 이미 프록시 경유면 그대로, 아니면 프록시로 감쌈
+  if(cdnUrl.indexOf('/api/media-proxy') !== -1) return cdnUrl;
+  return MEDIA_PROXY + encodeURIComponent(cdnUrl);
 }
 
 async function cloudLoad(){
