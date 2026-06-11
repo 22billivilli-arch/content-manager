@@ -2198,21 +2198,33 @@ function renderVideoTab(){
       const slider = document.createElement('div');
       slider.style.cssText = 'display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:6px;';
       const mkItem = (kind, url, idx, count) => {
-        const fname = kind==='video' ? `threads_${ts}_video${idx+1}.mp4` : `threads_${ts}_${idx+1}.jpg`;
         const item = document.createElement('div');
         item.style.cssText = 'flex:0 0 70%;scroll-snap-align:start;position:relative;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;';
         const media = kind==='video'
           ? `<video src="${url}" controls playsinline style="width:100%;height:100%;object-fit:contain;background:#000;display:block;"></video>`
           : `<img src="${url}" style="width:100%;height:100%;object-fit:contain;background:#000;display:block;" alt="">`;
         item.innerHTML = media +
-          `<span style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 7px;border-radius:10px;pointer-events:none;">${kind==='video'?'🎬 영상':'🖼️ 사진'}${count>1?' '+(idx+1):''}</span>` +
-          `<button class="cp-btn _dlBtn" style="position:absolute;bottom:6px;right:6px;margin:0;font-size:12px;padding:5px 9px;width:auto;">📥</button>`;
-        item.querySelector('._dlBtn').onclick = function(){ dlItem(url, fname, this); };
+          `<span style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 7px;border-radius:10px;pointer-events:none;">${kind==='video'?'🎬 영상':'🖼️ 사진'}${count>1?' '+(idx+1):''}</span>`;
         return item;
       };
       videos.forEach((url, i) => slider.appendChild(mkItem('video', url, i, videos.length)));
       images.forEach((url, i) => slider.appendChild(mkItem('image', url, i, images.length)));
       container.appendChild(slider);
+
+      // 슬라이더 하단 다운로드 버튼들 (영상→사진)
+      const dlRow = document.createElement('div');
+      dlRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;';
+      const mkDl = (kind, url, idx, count) => {
+        const fname = kind==='video' ? `threads_${ts}_video${idx+1}.mp4` : `threads_${ts}_${idx+1}.jpg`;
+        const b = document.createElement('button');
+        b.className = 'cp-btn'; b.style.cssText = 'margin:0;flex:1 1 130px;font-size:13px;';
+        b.textContent = `📥 ${kind==='video'?'영상':'사진'}${count>1?' '+(idx+1):''} 다운로드`;
+        b.onclick = function(){ dlItem(url, fname, this); };
+        return b;
+      };
+      videos.forEach((url, i) => dlRow.appendChild(mkDl('video', url, i, videos.length)));
+      images.forEach((url, i) => dlRow.appendChild(mkDl('image', url, i, images.length)));
+      container.appendChild(dlRow);
 
       container.style.display = 'block';
       toast(`미디어 ${total}개 발견`, true);
