@@ -807,11 +807,11 @@ const MON = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10�
 //  FEED ACCOUNTS
 // ═══════════════════════════════════════════════
 const FEED_ACCOUNTS = [
-  { name:'dnfkagksekfkawnl', token:'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD' },
-  { name:'ddack.life',       token:'THAALYAgagxE1BYlpmcmlRdk5yVER2TEtBalhwRkNZAcUpTNUlWUk5kR21TM01lNFRjZAkxOSG9kMzRhYWF3MFlFWWtybXZAXVTdfY1Fqa1pZAQU5ma3ZAEWXpZAb0ZAncXoyZA0N6TlFKenJIRlJVSURtLXUzZAjgxREg1YWhxMXg3ai1QNnpZAZA2tEWE5UZAXFIV09RVWcZD' },
-  { name:'sou.0921',         token:'THAALYAgagxE1BYmJHUmw3eGNaTEJhZAi1kQTNzbzhFNlRHd1ZA4b1V4cjlaX25DREF5ZAm1ENTVZATHBkZAENuRHJVTzFFUm5GR292OV9XTkpnX3A3Nm9JMXpJd1oxcDg5Wk0za3FjUHR4SHlsSG9mYkN1Ql9SMXhGV1JrY0RZARjRyU040TWU3Mks1cXA4NFZAhRjgZD' },
-  { name:'hunya.pick',       token:'THAALYAgagxE1BYlpLX19MVDYwTTJhdFNFeHhOZATIzN1dNTWZAMZAC1TRFlOZAVllLVFZAOGNaSktpZAjFwVjZArZAV9iVERELVE1X1hsb2FYcW9IZADA1R0RmSUJGRnhhdFJBd0xiQ0MxRlVrNWcya21ZAamZAPOTV4bVhwU2VqMzNvYlQ2VDd4QjdNVDd6MHd4Q3pUUFEZD' },
-  { name:'moos_emom',        token:'THAALYAgagxE1BYll5Q0doLVJkNEMwRVVETWd6aEgtMFJoSEhySlpYMFNhSmRXQTN3a2pCYm0wTTlXdWo0cUVSZA0ExOG9tNlkwQUlpMVhxeEU2QTg5LU9HeGVITUJlZAG5WQmRfZAzRCZAWpwWGduaTQ1ZAjVVNFQtQkVJeUN0dHBUekpVX1hCR01nVHNUYzM2ZAmcZD' },
+  { name:'dnfkagksekfkawnl', token:'TKN__dnfkagksekfkawnl' },
+  { name:'ddack.life', token:'TKN__ddack.life' },
+  { name:'sou.0921', token:'TKN__sou.0921' },
+  { name:'hunya.pick', token:'TKN__hunya.pick' },
+  { name:'moos_emom', token:'TKN__moos_emom' },
 ];
 
 // ═══════════════════════════════════════════════
@@ -1201,20 +1201,7 @@ function renderFavsTab(){
 
 // ── API POST ──────────────────────────────────────
 async function apiPost(url, params){
-  const qs = new URLSearchParams(params).toString();
-  const attempts = [
-    {u:`${url}?${qs}`, o:{method:'POST'}},
-    {u:PROXY+encodeURIComponent(`${url}?${qs}`), o:{method:'POST'}},
-  ];
-  let lastErr;
-  for(const {u,o} of attempts){
-    try{
-      const r = await fetch(u, o);
-      if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.error?.message||`HTTP ${r.status}`); }
-      return r.json();
-    } catch(e){ lastErr=e; }
-  }
-  throw lastErr;
+  return _tmCall(`${url}?${new URLSearchParams(params).toString()}`, 'POST');
 }
 
 // ── 발행 ─────────────────────────────────────────
@@ -1392,25 +1379,21 @@ async function _getAuthorReply(post){
 // ═══════════════════════════════════════════════
 //  THREADS API
 // ═══════════════════════════════════════════════
-async function apiFetch(url){
-  // 직접 호출 시도 → 실패하면 CORS 프록시 경유
-  const attempts = [url, PROXY + encodeURIComponent(url)];
-  let lastErr;
-  for(const target of attempts){
-    try{
-      const r = await fetch(target);
-      if(!r.ok){
-        let msg = `HTTP ${r.status}`;
-        try{ const j=await r.json(); msg=j.error?.message||msg; }catch(e){}
-        throw new Error(msg);
-      }
-      return r.json();
-    } catch(e){
-      lastErr = e;
-    }
-  }
-  throw lastErr;
+// 토큰은 백엔드(Vercel env)에 숨김 — TKN__<계정명> placeholder 를 프록시가 실토큰으로 치환.
+const TM_PROXY = 'https://cp-converter.vercel.app/api/threads-api';
+function tmSecret(){
+  let s = localStorage.getItem('tm_secret');
+  if(!s){ s = (prompt('스레드 프록시 시크릿을 입력하세요 (최초 1회):')||'').trim(); if(s) localStorage.setItem('tm_secret', s); }
+  return s;
 }
+async function _tmCall(url, method){
+  const r = await fetch(TM_PROXY, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url, method, secret: tmSecret() }) });
+  const j = await r.json().catch(()=>({}));
+  const errMsg = (j.error && (j.error.message || j.error)) || (!r.ok ? `HTTP ${r.status}` : '');
+  if(errMsg){ if(/인증|secret/i.test(String(errMsg))) localStorage.removeItem('tm_secret'); throw new Error(errMsg); }
+  return j;
+}
+async function apiFetch(url){ return _tmCall(url, 'GET'); }
 
 async function loadFeed(){
   const acc = FEED_ACCOUNTS[curAccIdx];
@@ -2516,7 +2499,7 @@ document.getElementById('syncPullBtn').onclick = async () => {
 (async function init(){
   // 토큰 미설정 시 자동 주입
   // dnfkagksekfkawnl 토큰 — 항상 최신 상태 유지
-  localStorage.setItem('threads_token', 'THAALYAgagxE1BYlpnVlJwSnc0dmFzOTdTTzl2UGFfVHQ3U3JBaTBhZATlFeVhWaFZAfbTJfa1hpNDFwc3IwU0pWc2pISExKNmpOSWNzSXkwVEtYbk04UWpoSlN1b0ZAwQVBOU2x6QzNfbW13Mmp3TmdITGhaU2Y3TVBxQ1ZAmVmNhOVdmanF0d0NhdFNZAQ3lTaUUZD');
+  // (threads_token 은 다운로드 백엔드에서 미사용 — 토큰 노출 제거)
   renderHeader();
   renderTopNav();   // 탭 즉시 렌더
   initCal();
