@@ -2103,6 +2103,8 @@ async function publishComposed(images, videos, text, acc, statusEl){
   }
   setS('캐러셀 생성...');
   const res = await apiPost(`${API}/${uid}/threads`, {media_type:'CAROUSEL', children:childIds.join(','), text, access_token:acc.token});
+  setS('캐러셀 처리 대기...');
+  await waitContainer(res.id, acc.token, null);   // FINISHED 전 발행하면 "resource does not exist"
   setS('발행 중...');
   await apiPost(`${API}/${uid}/threads_publish`, {creation_id:res.id, access_token:acc.token});
 }
