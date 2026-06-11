@@ -10,26 +10,26 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root {
-  --bg:     #0f0f0f;
-  --bg2:    #161616;
-  --bg3:    #1e1e1e;
-  --bg4:    #272727;
-  --accent: #00d4aa;
-  --accent-dim: rgba(0,212,170,.12);
-  --accent-dim2: rgba(0,212,170,.06);
-  --text:   #e2e2e2;
-  --text2:  #999;
-  --text3:  #555;
-  --border: #2a2a2a;
-  --border2:#383838;
-  --danger: #ff5555;
+  --bg:     #222a35;
+  --bg2:    #283140;
+  --bg3:    #333c4b;
+  --bg4:    #3a4150;
+  --accent: #ffd166;
+  --accent-dim: rgba(255,209,102,.15);
+  --accent-dim2: rgba(255,209,102,.07);
+  --text:   #ededed;
+  --text2:  #9aa3b2;
+  --text3:  #6a7283;
+  --border: #353e4d;
+  --border2:#454e5e;
+  --danger: #ff5e5e;
   --r:      12px;
   --r2:     8px;
   --r3:     6px;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 html{scroll-behavior:smooth;}
-body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;}
+body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;padding-bottom:calc(64px + env(safe-area-inset-bottom));}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px;}
@@ -48,17 +48,22 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 
 /* ── TOP NAV ── */
 .top-nav{
-  display:flex;gap:0;overflow-x:auto;
-  border-top:1px solid var(--border);padding:0 16px;
+  display:flex;gap:0;
+  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  background:var(--bg2);border-top:1px solid var(--border);
+  padding:0;padding-bottom:env(safe-area-inset-bottom);
+  box-shadow:0 -2px 14px rgba(0,0,0,.3);
 }
 .top-nav::-webkit-scrollbar{height:0;}
 .top-nav-btn{
-  padding:9px 15px;background:none;border:none;border-bottom:2px solid transparent;
-  color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px;font-weight:500;
-  white-space:nowrap;transition:color .15s,border-color .15s;
+  flex:1;padding:8px 4px 9px;background:none;border:none;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--text2);cursor:pointer;font-family:inherit;font-size:11px;font-weight:600;
+  white-space:nowrap;transition:color .15s;
 }
+.top-nav-btn .ic{font-size:20px;line-height:1;}
 .top-nav-btn:hover{color:var(--text);}
-.top-nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700;}
+.top-nav-btn.active{color:var(--accent);font-weight:800;}
 .btn-token{
   background:var(--accent-dim);color:var(--accent);
   border:1px solid rgba(0,212,170,.35);padding:7px 14px;
@@ -564,7 +569,7 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 .cp-textarea:focus{border-color:var(--accent);}
 .cp-btn{
   margin-top:12px;width:100%;padding:12px;border:none;border-radius:var(--r2);
-  background:#e52228;color:#fff;font-family:inherit;font-size:14px;font-weight:700;
+  background:var(--accent);color:#1c2330;font-family:inherit;font-size:14px;font-weight:800;
   cursor:pointer;transition:opacity .2s;
 }
 .cp-btn:hover{opacity:.85;}
@@ -1091,15 +1096,15 @@ function renderTopNav(){
   const nav = document.getElementById('topNav');
   nav.innerHTML = '';
   const tabs = [
-    {id:'sched', label:'📋 스케줄러'},
-    {id:'vault', label:'📦 보관소'},
-    {id:'cp',    label:'🔗 쿠파스변환'},
-    {id:'vd',    label:'📥 영상다운로드'},
+    {id:'vd',    ic:'📤', label:'발행'},
+    {id:'vault', ic:'📦', label:'보관소'},
+    {id:'sched', ic:'📋', label:'스케줄러'},
+    {id:'cp',    ic:'🔗', label:'쿠파스변환'},
   ];
   tabs.forEach(t => {
     const btn = document.createElement('button');
     btn.className = 'top-nav-btn' + (curPage===t.id ? ' active' : '');
-    btn.textContent = t.label;
+    btn.innerHTML = `<span class="ic">${t.ic}</span><span>${t.label}</span>`;
     btn.onclick = () => switchPage(t.id);
     nav.appendChild(btn);
   });
@@ -2509,6 +2514,7 @@ document.getElementById('syncPullBtn').onclick = async () => {
   renderCal();      // 로컬 데이터로 즉시 렌더 (Firebase 대기 없이)
   renderCL();
   renderAccTabs();
+  switchPage('vd'); // 기본 탭: 발행
   // Firebase 동기화 (완료 후 재렌더)
   if(initFirebase()){
     setSyncBtn('⏳', 'loading');
