@@ -2127,7 +2127,7 @@ function renderVideoTab(){
       <div id="_vdItems" style="display:none;margin-top:16px;"></div>
       <div id="_vdPublish" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
         <div class="cp-label">✍️ 대본 생성</div>
-        <textarea class="cp-input" id="_vdTopic" placeholder="주제/지시 입력 (예: 이 무선 이어폰의 장점을 후킹하게 소개)" style="width:100%;min-height:56px;font-size:13px;"></textarea>
+        <textarea class="cp-input" id="_vdTopic" placeholder="추가 지시 (선택) — 가격·핵심효과·제품명 등. 비우면 위 제품 사진만 보고 5가지 유형으로 생성" style="width:100%;min-height:56px;font-size:13px;"></textarea>
         <button class="cp-btn" id="_vdGenBtn" style="margin-top:8px;">🤖 대본 5개 생성</button>
         <div id="_vdScripts" style="margin-top:12px;"></div>
         <div class="cp-label" style="margin-top:14px;">계정 선택</div>
@@ -2244,12 +2244,13 @@ function renderVideoTab(){
   // ── 대본 생성 (Gemini) ──
   q('_vdGenBtn').onclick = async () => {
     const topic = q('_vdTopic').value.trim();
-    if(!topic){ toast('주제/지시를 입력해주세요'); return; }
+    const imageUrl = (_vdFetched.images && _vdFetched.images[0]) || '';
+    if(!topic && !imageUrl){ toast('제품 사진을 먼저 가져오거나 지시를 입력해주세요'); return; }
     const gb = q('_vdGenBtn'); gb.disabled = true; gb.innerHTML = '<span class="spin"></span> 생성 중...';
     try{
       const r = await fetch('https://cp-converter.vercel.app/api/gemini', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({topic, count:5}), signal: AbortSignal.timeout(40000),
+        body: JSON.stringify({topic, imageUrl}), signal: AbortSignal.timeout(75000),
       });
       const d = await r.json();
       if(d.error) throw new Error(d.error);
@@ -2261,11 +2262,12 @@ function renderVideoTab(){
         const rd = document.createElement('input');
         rd.type='radio'; rd.name='_vdScript'; rd.value=i; rd.style.marginRight='7px'; if(i===0) rd.checked=true;
         lab.appendChild(rd);
-        lab.appendChild(document.createTextNode(s));
+        if(s.type){ const tag=document.createElement('span'); tag.textContent='['+s.type+'] '; tag.style.cssText='color:var(--accent);font-weight:800;'; lab.appendChild(tag); }
+        lab.appendChild(document.createTextNode(s.text||''));
         box.appendChild(lab);
       });
       if(!_vdScriptList.length) toast('대본 결과가 비었습니다');
-    }catch(e){ toast('대본 생성 실패: ' + e.message); }
+    }catch(e){ toast('대본 생성 실패: ' + (e.name==='TimeoutError'?'시간 초과(다시 시도)':e.message)); }
     finally{ gb.disabled=false; gb.innerHTML='🤖 대본 5개 생성'; }
   };
 
@@ -2275,7 +2277,7 @@ function renderVideoTab(){
     if(accVal===''){ toast('계정을 선택해주세요'); return; }
     const acc = FEED_ACCOUNTS[parseInt(accVal)];
     const sel = q('_vdScripts').querySelector('input[name=_vdScript]:checked');
-    const text = (sel && _vdScriptList[parseInt(sel.value)]) || '';
+    const text = (sel && _vdScriptList[parseInt(sel.value)] && _vdScriptList[parseInt(sel.value)].text) || '';
     if(!_vdFetched.images.length && !_vdFetched.videos.length){ toast('먼저 미디어를 가져와주세요'); return; }
     if(!confirm(`${acc.name} 계정으로 발행할까요?\n영상 ${_vdFetched.videos.length} · 사진 ${_vdFetched.images.length}${text?' · 대본 포함':''}`)) return;
     const pb = q('_vdPubBtn'); pb.disabled = true;
