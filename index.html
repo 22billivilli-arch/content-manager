@@ -2257,14 +2257,21 @@ function renderVideoTab(){
       _vdScriptList = d.scripts || [];
       const box = q('_vdScripts'); box.innerHTML = '';
       _vdScriptList.forEach((s, i) => {
-        const lab = document.createElement('label');
-        lab.style.cssText = 'display:block;border:1px solid var(--border);border-radius:var(--r2);padding:10px;margin-bottom:8px;cursor:pointer;font-size:13px;line-height:1.55;white-space:pre-wrap;';
+        const card = document.createElement('div');
+        card.style.cssText = 'border:1px solid var(--border);border-radius:var(--r2);padding:10px;margin-bottom:8px;';
+        const head = document.createElement('label');
+        head.style.cssText = 'display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:6px;font-weight:800;color:var(--accent);font-size:12px;';
         const rd = document.createElement('input');
-        rd.type='radio'; rd.name='_vdScript'; rd.value=i; rd.style.marginRight='7px'; if(i===0) rd.checked=true;
-        lab.appendChild(rd);
-        if(s.type){ const tag=document.createElement('span'); tag.textContent='['+s.type+'] '; tag.style.cssText='color:var(--accent);font-weight:800;'; lab.appendChild(tag); }
-        lab.appendChild(document.createTextNode(s.text||''));
-        box.appendChild(lab);
+        rd.type='radio'; rd.name='_vdScript'; rd.value=i; if(i===0) rd.checked=true;
+        head.appendChild(rd);
+        head.appendChild(document.createTextNode(s.type ? '['+s.type+']' : ('대본 '+(i+1))));
+        card.appendChild(head);
+        const ta = document.createElement('textarea');
+        ta.className = 'cp-input'; ta.value = s.text || '';
+        ta.style.cssText = 'width:100%;min-height:96px;font-size:13px;line-height:1.5;resize:vertical;';
+        ta.addEventListener('focus', () => { rd.checked = true; }); // 편집 시작=선택
+        card.appendChild(ta);
+        box.appendChild(card);
       });
       if(!_vdScriptList.length) toast('대본 결과가 비었습니다');
     }catch(e){ toast('대본 생성 실패: ' + (e.name==='TimeoutError'?'시간 초과(다시 시도)':e.message)); }
@@ -2277,7 +2284,8 @@ function renderVideoTab(){
     if(accVal===''){ toast('계정을 선택해주세요'); return; }
     const acc = FEED_ACCOUNTS[parseInt(accVal)];
     const sel = q('_vdScripts').querySelector('input[name=_vdScript]:checked');
-    const text = (sel && _vdScriptList[parseInt(sel.value)] && _vdScriptList[parseInt(sel.value)].text) || '';
+    const ta = sel && sel.closest('div').querySelector('textarea');
+    const text = (ta ? ta.value.trim() : '');  // 사용자가 편집한 최종 텍스트
     if(!_vdFetched.images.length && !_vdFetched.videos.length){ toast('먼저 미디어를 가져와주세요'); return; }
     if(!confirm(`${acc.name} 계정으로 발행할까요?\n영상 ${_vdFetched.videos.length} · 사진 ${_vdFetched.images.length}${text?' · 대본 포함':''}`)) return;
     const pb = q('_vdPubBtn'); pb.disabled = true;
