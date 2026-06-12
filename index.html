@@ -2258,6 +2258,17 @@ function renderVideoTab(){
         : `<img src="${url}" style="width:100%;height:100%;object-fit:contain;background:#000;display:block;" alt="">`;
       item.innerHTML = media +
         `<span style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 7px;border-radius:10px;pointer-events:none;">${kind==='video'?'🎬 영상':'🖼️ 사진'}${count>1?' '+(idx+1):''}</span>`;
+      const x = document.createElement('button');
+      x.textContent = '✕';
+      x.title = '삭제';
+      x.style.cssText = 'position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.62);color:#fff;border:none;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3;';
+      x.onclick = () => {
+        if(kind==='video') _vdFetched.videos = _vdFetched.videos.filter(u => u !== url);
+        else _vdFetched.images = _vdFetched.images.filter(u => u !== url);
+        showFetched(_vdFetched.images, _vdFetched.videos);
+        toast('삭제됨');
+      };
+      item.appendChild(x);
       return item;
     };
     videos.forEach((url, i) => slider.appendChild(mkItem('video', url, i, videos.length)));
