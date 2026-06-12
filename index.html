@@ -2450,7 +2450,7 @@ function cloudSave(){
     try{
       const data = {};
       const fixed = ['fav_posts','f_name','threads_token','token_hunya',
-                     'coupang_access','coupang_secret','coupang_subid'];
+                     'coupang_access','coupang_secret','coupang_subid','cm_urlvault'];
       fixed.forEach(k => { const v = localStorage.getItem(k); if(v !== null) data[k] = v; });
       for(let i = 0; i < localStorage.length; i++){
         const k = localStorage.key(i);
@@ -2767,9 +2767,71 @@ let _cmVaultVideoFile = null;
 let _cmVaultPhotoFiles = [];
 let _cmvEditingId = null;
 
+// ── URL 보관함: Threads URL 저장 → 나중에 발행탭으로 ──
+function uvLoad(){ try{ return JSON.parse(localStorage.getItem('cm_urlvault')||'[]'); }catch(_){ return []; } }
+function uvStore(arr){ localStorage.setItem('cm_urlvault', JSON.stringify(arr)); if(typeof cloudSave==='function') cloudSave(); }
+async function uvThumb(imgUrl){
+  try{
+    const blob = await (await fetch(MEDIA_PROXY+encodeURIComponent(imgUrl))).blob();
+    const bmp = await createImageBitmap(blob);
+    const w = 240, h = Math.round(w*bmp.height/bmp.width) || 240;
+    const cv = document.createElement('canvas'); cv.width=w; cv.height=h;
+    cv.getContext('2d').drawImage(bmp,0,0,w,h);
+    return cv.toDataURL('image/jpeg', 0.65);
+  }catch(_){ return ''; }
+}
+async function uvAdd(){
+  const inp = document.getElementById('uvUrl'); const url = (inp.value||'').trim();
+  if(!url){ toast('Threads URL을 입력해주세요'); return; }
+  const btn = document.getElementById('uvAddBtn'); btn.disabled = true; const ot = btn.textContent; btn.textContent = '저장 중...';
+  try{
+    const r = await fetch(CP_THREADS_API, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url}), signal: AbortSignal.timeout(20000)});
+    const d = await r.json();
+    if(d.error) throw new Error(d.error);
+    const imgs = d.images||[], vids = d.videos||[];
+    if(!imgs.length && !vids.length) throw new Error('미디어를 찾을 수 없습니다');
+    const thumb = imgs[0] ? await uvThumb(imgs[0]) : '';
+    const arr = uvLoad();
+    arr.unshift({id:String(Date.now()), url, thumb, v:vids.length, i:imgs.length, savedAt:new Date().toISOString()});
+    uvStore(arr); inp.value=''; renderUrlVault();
+    toast('보관됨 (영상'+vids.length+'·사진'+imgs.length+')', true);
+  }catch(e){ toast('저장 실패: '+(e.name==='TimeoutError'?'시간초과':e.message)); }
+  finally{ btn.disabled=false; btn.textContent=ot; }
+}
+function uvDelete(id){ if(!confirm('보관 항목을 삭제할까요?')) return; uvStore(uvLoad().filter(x=>x.id!==id)); renderUrlVault(); }
+function uvPublish(url){
+  switchPage('vd');
+  setTimeout(()=>{ const i=document.querySelector('#_vdUrl'); if(i){ i.value=url; const b=document.querySelector('#_vdFetchBtn'); if(b) b.click(); } window.scrollTo(0,0); }, 130);
+}
+function renderUrlVault(){
+  const box = document.getElementById('uvList'); if(!box) return;
+  const arr = uvLoad();
+  if(!arr.length){ box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:22px 0;font-size:13px;">보관된 URL이 없어요.<br>위에 Threads URL을 넣고 저장하세요.</div>'; return; }
+  box.innerHTML = '';
+  arr.forEach(it => {
+    const card = document.createElement('div');
+    card.style.cssText = 'display:flex;gap:10px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;';
+    const thumb = it.thumb
+      ? `<img src="${it.thumb}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;flex-shrink:0;background:#000;">`
+      : `<div style="width:54px;height:54px;border-radius:8px;background:var(--bg4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px;">🔗</div>`;
+    card.innerHTML = thumb +
+      `<div style="flex:1;min-width:0;"><div style="font-size:12px;color:var(--text2);margin-bottom:2px;">🎬${it.v||0} · 🖼️${it.i||0}</div><div style="font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${it.url.replace(/^https?:\/\/(www\.)?/,'')}</div></div>` +
+      `<button class="uvPub cp-btn" style="margin:0;width:auto;padding:8px 11px;font-size:13px;flex-shrink:0;">📤 발행</button>` +
+      `<button class="uvDel" style="background:var(--bg4);border:1px solid var(--border2);color:var(--text2);border-radius:8px;width:34px;height:34px;flex-shrink:0;cursor:pointer;">🗑</button>`;
+    card.querySelector('.uvPub').onclick = () => uvPublish(it.url);
+    card.querySelector('.uvDel').onclick = () => uvDelete(it.id);
+    box.appendChild(card);
+  });
+}
+
 async function renderVaultTab(){
   const fw = document.getElementById('feedWrap');
-  fw.innerHTML = '<div class="cmv-wrap" id="cmvWrap"><div class="cmv-form-card"><div class="cmv-form-header"><span class="cmv-form-title">📦 콘텐츠 보관소</span></div>' +
+  fw.innerHTML = '<div class="cmv-wrap" id="cmvWrap">' +
+    '<div class="cmv-form-card"><div class="cmv-form-header"><span class="cmv-form-title">🔗 URL 보관함</span></div>' +
+    '<input class="cp-input" id="uvUrl" placeholder="https://www.threads.com/@.../post/..." style="width:100%;font-size:13px;">' +
+    '<button class="cp-btn" id="uvAddBtn" onclick="uvAdd()" style="margin-top:8px;">💾 URL 보관</button>' +
+    '<div id="uvList" style="margin-top:12px;"></div></div>' +
+    '<div class="cmv-form-card"><div class="cmv-form-header"><span class="cmv-form-title">📦 콘텐츠 보관소</span></div>' +
     '<textarea class="cmv-textarea" id="cmvText" placeholder="글을 작성하세요..."></textarea>' +
     '<textarea class="cmv-link-input" id="cmvLink" placeholder="🔗 링크·메모 (발행에 포함 안됨)" rows="2"></textarea>' +
     '<div class="cmv-file-row">' +
@@ -2800,6 +2862,7 @@ async function renderVaultTab(){
     else { btn.textContent = '📷 사진 선택'; btn.classList.remove('has-file'); }
   };
 
+  renderUrlVault();
   await cmvRenderFeed();
 }
 
