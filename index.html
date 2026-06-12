@@ -10,19 +10,19 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root {
-  --bg:     #222a35;
-  --bg2:    #283140;
-  --bg3:    #333c4b;
-  --bg4:    #3a4150;
+  --bg:     #eeeeee;
+  --bg2:    #e7e9ed;
+  --bg3:    #3a4150;
+  --bg4:    #474f60;
   --accent: #ffd166;
-  --accent-dim: rgba(255,209,102,.15);
-  --accent-dim2: rgba(255,209,102,.07);
+  --accent-dim: rgba(255,209,102,.16);
+  --accent-dim2: rgba(255,209,102,.08);
   --text:   #ededed;
-  --text2:  #9aa3b2;
-  --text3:  #6a7283;
-  --border: #353e4d;
-  --border2:#454e5e;
-  --danger: #ff5e5e;
+  --text2:  #8b94a3;
+  --text3:  #9aa3b2;
+  --border: #2e3641;
+  --border2:#515a6b;
+  --danger: #e35555;
   --r:      12px;
   --r2:     8px;
   --r3:     6px;
@@ -43,13 +43,13 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 }
 .header-row1{padding:12px 20px;display:flex;align-items:center;justify-content:space-between;}
 .header-left{display:flex;flex-direction:column;gap:2px;}
-.header-title{font-size:18px;font-weight:700;color:var(--accent);letter-spacing:-.5px;}
+.header-title{font-size:18px;font-weight:800;color:#393E46;letter-spacing:-.5px;}
 .header-date{font-size:12px;color:var(--text2);}
 
 /* ── TOP NAV ── */
 .top-nav{
   display:flex;gap:0;
-  position:fixed;bottom:0;left:0;right:0;z-index:300;
+  position:fixed;bottom:2px;left:0;right:0;z-index:300;
   background:var(--bg2);border-top:1px solid var(--border);
   padding:0;padding-bottom:env(safe-area-inset-bottom);
   box-shadow:0 -2px 14px rgba(0,0,0,.3);
@@ -399,7 +399,8 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 .main-tab.vd-tab.active{background:#7c3aed;border-color:#7c3aed;color:#fff;}
 
 /* ── CP / VD TAB WRAP ── */
-.cp-tab-wrap{max-width:600px;margin:24px auto;padding:0 8px;}
+.cp-tab-wrap{max-width:600px;margin:18px auto;padding:18px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);}
+.cp-head-title{color:var(--text);}
 .cp-head-row{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
 .cp-head-title{font-size:15px;font-weight:600;flex:1;}
 .vd-preview{width:100%;border-radius:var(--r2);background:#000;max-height:360px;}
@@ -555,7 +556,7 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
 .cp-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
 .cp-label{display:block;font-size:11px;color:var(--text2);margin-bottom:5px;}
 .cp-input{
-  width:100%;background:var(--bg3);border:1px solid var(--border2);
+  width:100%;background:var(--bg4);border:1px solid var(--border2);
   color:var(--text);font-family:inherit;font-size:13px;
   padding:9px 11px;border-radius:var(--r2);outline:none;transition:border-color .2s;
 }
@@ -2128,11 +2129,13 @@ function renderVideoTab(){
         <input class="cp-input" id="_vdUrl" type="text"
           placeholder="https://www.threads.net/@username/post/..."
           style="width:100%;font-size:13px;">
-        <button class="cp-btn" id="_vdFetchBtn" style="margin-top:10px;">미디어 가져오기</button>
-        <button class="cp-btn" id="_vdClearBtn" style="margin-top:8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border2);">URL 지우기</button>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="cp-btn" id="_vdFetchBtn" style="margin-top:0;flex:1;">미디어 가져오기</button>
+          <button class="cp-btn" id="_vdClearBtn" style="margin-top:0;flex:0 0 auto;width:auto;padding:12px 16px;background:var(--bg4);color:var(--text2);border:1px solid var(--border2);">URL 지우기</button>
+        </div>
       </div>
       <div id="_vdItems" style="display:none;margin-top:16px;"></div>
-      <div id="_vdPublish" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+      <div id="_vdPublish" style="display:block;margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
         <div class="cp-label">✍️ 대본 생성</div>
         <textarea class="cp-input" id="_vdTopic" placeholder="추가 지시 (선택) — 가격·핵심효과·제품명 등. 비우면 위 제품 사진만 보고 5가지 유형으로 생성" style="width:100%;min-height:56px;font-size:13px;"></textarea>
         <button class="cp-btn" id="_vdGenBtn" style="margin-top:8px;">🤖 대본 5개 생성</button>
@@ -2237,7 +2240,7 @@ function renderVideoTab(){
       toast(`미디어 ${total}개 발견`, true);
       _vdFetched = { images, videos };
       q('_vdAcc').innerHTML = FEED_ACCOUNTS.map((a,i)=>a.token?`<option value="${i}">${a.name}</option>`:'').join('');
-      q('_vdPublish').style.display = total>0 ? 'block' : 'none';
+      q('_vdPublish').style.display = 'block';
     } catch(e){
       q('_vdErr').style.display = 'block';
       q('_vdErr').textContent = '오류: ' + e.message;
@@ -2309,15 +2312,17 @@ function renderVideoTab(){
   ttWrap.style.marginTop = '24px';
   ttWrap.innerHTML = `
     <div class="cp-head-row">
-      <span class="cp-head-title">🎵 TikTok 영상 다운로드</span>
+      <span class="cp-head-title">📥 영상다운로드</span>
     </div>
     <div>
       <div class="cp-label">TikTok URL</div>
       <input class="cp-input" id="_ttUrl" type="text"
         placeholder="https://www.tiktok.com/@username/video/..."
         style="width:100%;font-size:13px;">
-      <button class="cp-btn" id="_ttFetchBtn" style="margin-top:10px;">영상 가져오기</button>
-      <button class="cp-btn" id="_ttClearBtn" style="margin-top:8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border2);">URL 지우기</button>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="cp-btn" id="_ttFetchBtn" style="margin-top:0;flex:1;">영상 가져오기</button>
+        <button class="cp-btn" id="_ttClearBtn" style="margin-top:0;flex:0 0 auto;width:auto;padding:12px 16px;background:var(--bg4);color:var(--text2);border:1px solid var(--border2);">URL 지우기</button>
+      </div>
     </div>
     <div id="_ttResult" style="display:none;margin-top:16px;"></div>
     <div id="_ttErr" style="display:none;margin-top:12px;" class="cp-result err"></div>
