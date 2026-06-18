@@ -1746,7 +1746,7 @@ function getMediaList(post, children){
   return [];
 }
 
-const MEDIA_PROXY = 'https://cp-converter.vercel.app/api/media-proxy?url=';
+const MEDIA_PROXY = 'https://media-proxy.billivilli.workers.dev/?url=';
 
 async function _fetchBlob(url){
   // Vercel 서버 프록시 우선 (CORS 완전 우회), 실패시 직접/corsproxy
@@ -2457,7 +2457,7 @@ async function uploadMediaToTempHost(cdnUrl, statusEl){
   if(statusEl) statusEl.textContent = '미디어 준비 중...';
   if(!cdnUrl) throw new Error('미디어 URL 없음');
   // 이미 프록시 경유면 그대로, 아니면 프록시로 감쌈
-  if(cdnUrl.indexOf('/api/media-proxy') !== -1) return cdnUrl;
+  if(cdnUrl.indexOf('media-proxy') !== -1) return cdnUrl;  // /api/media-proxy(구) 또는 media-proxy.*.workers.dev(신) 이미 프록시됨
   if(cdnUrl.indexOf('blob.vercel-storage.com') !== -1) return cdnUrl;  // Blob 공개 URL은 직접 pull
   return MEDIA_PROXY + encodeURIComponent(cdnUrl);
 }
