@@ -652,6 +652,7 @@ body{font-family:'Pretendard',-apple-system,sans-serif;background:var(--bg);colo
     <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn-sync" id="btnSync" title="클라우드 동기화 설정">☁️</button>
       <button class="btn-token" id="btnToken" title="토큰 설정">🔑</button>
+      <button class="btn-token" id="btnSecret" title="프록시 시크릿 복사" onclick="(function(){var s=localStorage.getItem('tm_secret');if(s){try{navigator.clipboard.writeText(s)}catch(e){}alert('프록시 시크릿 (복사됨):\n\n'+s);}else{alert('tm_secret 없음 — 스레드매니저에서 발행을 한 번 시도하면 시크릿 입력창이 떠요.');}})()">🔓</button>
       <button class="btn-timer" id="btnTimerWork" title="집중 타이머 20분">⏱</button>
       <button class="btn-timer" id="btnTimerRest" title="휴식 타이머 10분">☕</button>
     </div>
@@ -796,7 +797,7 @@ const ACCOUNTS = [
   {id:'B', name:'ddack.life'},
   {id:'C', name:'sou.0921'},
   {id:'D', name:'hunya.pick'},
-  {id:'E', name:'moos_smom'},
+  {id:'E', name:'moos_emom'},
   {id:'F', name:''},
 ];
 const COLS = [
